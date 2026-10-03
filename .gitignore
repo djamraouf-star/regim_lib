@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
 *.egg-info/
 /regime_lib/doc/_build/
 /regime_lib/doc/_autosummary/

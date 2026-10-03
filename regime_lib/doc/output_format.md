@@ -22,14 +22,17 @@ de choisir l'Ask ou le mid. Le volume agrégé est la somme de `bidVolume` et
 `askVolume`, qui sont des tailles de cotation et non un volume de
 transactions.
 
-Les barres tick comportent en plus `spread_mean`, `spread_max`,
-`spread_close`, `ask_close`, `tick_count` et `is_partial`. Une barre
-étiquetée T couvre `[T - période, T)` : un tick situé exactement sur T
-appartient à la barre qui commence à T. La première et la dernière barre
-produites à partir des ticks sont marquées partielles. Le resampling
-OHLCV vers un timeframe supérieur utilise `label='right', closed='right'`,
-agrège les seules colonnes OHLCV et ajoute `is_partial` pour la dernière
-barre potentiellement incomplète.
+Les barres tick comportent en plus `bid_volume`, `ask_volume`,
+`spread_mean`, `spread_max`, `spread_close`, `ask_close`, `tick_count` et
+`is_partial`. Une barre étiquetée T couvre `[T - période, T)` : un tick
+situé exactement sur T appartient à la barre qui commence à T. La première
+et la dernière barre produites à partir des ticks sont marquées partielles.
+Le resampling vers un timeframe supérieur utilise
+`label='right', closed='right'` et conserve les colonnes annexes présentes :
+les volumes et `tick_count` sont sommés, les spreads moyens sont moyennés,
+les spreads maximum sont maximisés, et les valeurs de clôture (`spread_close`,
+`ask_close`) sont prises sur la dernière barre de la fenêtre. La dernière
+barre résultante est marquée `is_partial`.
 
 ---
 

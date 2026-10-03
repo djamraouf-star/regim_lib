@@ -81,6 +81,7 @@ def test_load_parquet_aggregates_quote_ticks_using_bid_and_enriches_bars(
     assert bars.attrs["price_side"] == "bid"
     assert bars.columns.tolist() == [
         "open", "high", "low", "close", "volume",
+        "bid_volume", "ask_volume",
         "spread_mean", "spread_max", "spread_close", "ask_close",
         "tick_count", "is_partial",
     ]
@@ -94,6 +95,8 @@ def test_load_parquet_aggregates_quote_ticks_using_bid_and_enriches_bars(
     ]
     first_minute = bars.loc[pd.Timestamp("2026-01-02 01:01:00", tz="UTC")]
     assert first_minute["volume"] == pytest.approx(0.8)
+    assert first_minute["bid_volume"] == pytest.approx(0.4)
+    assert first_minute["ask_volume"] == pytest.approx(0.4)
     assert first_minute["spread_mean"] == pytest.approx(1.5)
     assert first_minute["spread_max"] == 2.0
     assert first_minute["spread_close"] == 1.0
@@ -105,9 +108,13 @@ def test_load_parquet_aggregates_quote_ticks_using_bid_and_enriches_bars(
     assert hourly.loc[pd.Timestamp("2026-01-02 02:00:00", tz="UTC"),
                       "volume"] == pytest.approx(1.2)
     assert hourly.loc[pd.Timestamp("2026-01-02 02:00:00", tz="UTC"),
+                      "bid_volume"] == pytest.approx(0.6)
+    assert hourly.loc[pd.Timestamp("2026-01-02 02:00:00", tz="UTC"),
+                      "ask_volume"] == pytest.approx(0.6)
+    assert hourly.loc[pd.Timestamp("2026-01-02 02:00:00", tz="UTC"),
                       "close"] == 12.0
     assert hourly["is_partial"].tolist() == [True]
-    assert "spread_mean" not in hourly.columns
+    assert "spread_mean" in hourly.columns
 
 
 @pytest.mark.parametrize(
