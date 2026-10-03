@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -83,6 +85,31 @@ def test_welch_moyennes_differentes():
     b = np.random.default_rng(1).normal(1, 1, 500)
     res = welch_test(a, b)
     assert res["pvalue"] < 1e-10
+
+
+def test_welch_ne_perd_pas_de_precision_avec_un_decalage_commun():
+    offset = 1e12
+    a = offset + np.tile([0.0, 0.001, -0.001, 0.002], 100)
+    b = offset + np.tile([0.001, 0.002, 0.0, 0.003], 100)
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        res = welch_test(a, b)
+
+    assert not captured
+    assert np.isfinite(res["t_stat"])
+    assert np.isfinite(res["pvalue"])
+    assert res["pvalue"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_welch_groupes_constants():
+    identiques = welch_test(np.ones(10), np.ones(10))
+    differents = welch_test(np.ones(10), np.full(10, 2.0))
+
+    assert identiques["t_stat"] == 0.0
+    assert identiques["pvalue"] == 1.0
+    assert np.isinf(differents["t_stat"])
+    assert differents["pvalue"] == 0.0
 
 
 def test_mann_whitney_detecte_decalage():

@@ -157,6 +157,8 @@ def welch_test(a: np.ndarray, b: np.ndarray) -> dict:
         Clés : `t_stat`, `pvalue`, `n_a`, `n_b`, `mean_a`, `mean_b`,
         `std_a`, `std_b`. `nan` si un échantillon a moins de 2 points.
     """
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
     if len(a) < 2 or len(b) < 2:
         return {
             "t_stat": np.nan, "pvalue": np.nan,
@@ -164,7 +166,35 @@ def welch_test(a: np.ndarray, b: np.ndarray) -> dict:
             "mean_a": np.nan, "mean_b": np.nan,
             "std_a": np.nan, "std_b": np.nan,
         }
-    t, p = stats.ttest_ind(a, b, equal_var=False)
+
+    # Center both samples around one shared reference before computing
+    # moments. This avoids loss of precision when values have a large common
+    # offset but very small between/within-group differences.
+    reference = a[0]
+    a_centered = a - reference
+    b_centered = b - reference
+    mean_a_centered = float(np.mean(a_centered))
+    mean_b_centered = float(np.mean(b_centered))
+    mean_difference = mean_a_centered - mean_b_centered
+    var_a = float(np.var(a_centered, ddof=1))
+    var_b = float(np.var(b_centered, ddof=1))
+    variance_a = var_a / len(a)
+    variance_b = var_b / len(b)
+    standard_error_squared = variance_a + variance_b
+
+    if standard_error_squared == 0.0:
+        if mean_difference == 0.0:
+            t, p = 0.0, 1.0
+        else:
+            t, p = np.copysign(np.inf, mean_difference), 0.0
+    else:
+        degrees_of_freedom = standard_error_squared**2 / (
+            variance_a**2 / (len(a) - 1)
+            + variance_b**2 / (len(b) - 1)
+        )
+        t = mean_difference / np.sqrt(standard_error_squared)
+        p = 2.0 * stats.t.sf(abs(t), degrees_of_freedom)
+
     return {
         "t_stat": float(t),
         "pvalue": float(p),

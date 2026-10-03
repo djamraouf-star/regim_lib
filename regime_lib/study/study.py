@@ -216,6 +216,7 @@ class Study:
                 t = tab.reset_index().copy()
                 t["feature"] = feat
                 t["cible"] = cible
+                t["modalite"] = t["modalite"].astype(str)
                 tests_longs.append(t)
             if tests_longs:
                 tests_path = output_dir / "study_tests_modalite.parquet"

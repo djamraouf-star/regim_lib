@@ -1,4 +1,5 @@
 """
+
 regime_lib — bibliothèque de détection de régimes de marché.
 
 Contenu exposé
@@ -33,6 +34,16 @@ bord volontaire** : le registre est peuplé au chargement du package.
 Le CLI (`regime_lib.cli`) s'appuie sur ce mécanisme, mais un import
 direct dans un script utilisateur produit le même effet.
 """
+
+# Import each family so its concrete methods register with METHOD_REGISTRY.
+from regime_lib.methods import entropy  # noqa: F401
+from regime_lib.methods import misc  # noqa: F401
+from regime_lib.methods import price  # noqa: F401
+from regime_lib.methods import statistical  # noqa: F401
+from regime_lib.methods import trend  # noqa: F401
+from regime_lib.methods import vector  # noqa: F401
+from regime_lib.methods import volatility  # noqa: F401
+from regime_lib.methods import volume  # noqa: F401
 
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.output import OPTIONAL_COLUMNS, REQUIRED_COLUMNS
