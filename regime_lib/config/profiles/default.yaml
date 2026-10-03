@@ -1,0 +1,205 @@
+# Profil par défaut — valeurs de référence du projet.
+#
+# Tous les autres profils héritent implicitement de celui-ci. Ils ne
+# redéfinissent que ce qu'ils changent.
+#
+# Ce fichier contient :
+#   - les valeurs de référence des méthodes (section `methodes:`) ;
+#   - la configuration du contexte temporel (section `context:`) ;
+#   - la configuration de la projection (section `segmentation:`).
+#
+# Voir `doc/config.md`, `doc/context.md` et `doc/volume.md` pour la
+# sémantique.
+
+nom: default
+type: default
+description: "Valeurs de référence, calibrées sur EURUSD"
+
+donnees:
+  source: barres
+  timeframes: [M1, M5, M15, H1]
+
+methodes:
+  # ---------------------------------------------------------------------------
+  # Volatilité
+  # ---------------------------------------------------------------------------
+  atr_volatility:
+    timeframes:
+      M1:  {n_atr: 20, fenetre: 30000, min_periods: 15000}
+      M5:  {n_atr: 20, fenetre: 6000,  min_periods: 3000}
+      M15: {n_atr: 14, fenetre: 2000,  min_periods: 1000}
+      M30: {n_atr: 14, fenetre: 1000,  min_periods: 500}
+      H1:  {n_atr: 14, fenetre: 500,   min_periods: 250}
+      H4:  {n_atr: 14, fenetre: 125,   min_periods: 62}
+      D1:  {n_atr: 14, fenetre: 21,    min_periods: 10}
+      W1:  {n_atr: 14, fenetre: 12,    min_periods: 6}
+    n_direction: 20
+    q_low: 0.33
+    q_high: 0.67
+
+  # ---------------------------------------------------------------------------
+  # Tendance
+  # ---------------------------------------------------------------------------
+  er_kaufman:
+    timeframes:
+      M1:  {n_er: 20, fenetre: 8000, min_periods: 4000}
+      M5:  {n_er: 20, fenetre: 3000, min_periods: 1500}
+      M15: {n_er: 20, fenetre: 2000, min_periods: 1000}
+      M30: {n_er: 20, fenetre: 1500, min_periods: 750}
+      H1:  {n_er: 20, fenetre: 700,  min_periods: 350}
+      H4:  {n_er: 20, fenetre: 200,  min_periods: 100}
+      D1:  {n_er: 20, fenetre: 40,   min_periods: 20}
+      W1:  {n_er: 20, fenetre: 20,   min_periods: 10}
+    q_chop: 0.40
+    q_tendance: 0.60
+
+  adx:
+    n_adx: 14
+    seuil_range: 20.0
+    seuil_tendance: 25.0
+
+  # ---------------------------------------------------------------------------
+  # Statistique
+  # ---------------------------------------------------------------------------
+  hmm_gaussian:
+    n_states: 2
+    n_iter: 100
+    seed: 42
+
+  # ---------------------------------------------------------------------------
+  # Prix
+  # ---------------------------------------------------------------------------
+  price_action:
+    n_fractale: 5
+    k_atr: 0.5
+    n_atr_tol: 14
+
+  mss_choch:
+    timeframes:
+      M1:  {n_fractale: 5}
+      M5:  {n_fractale: 5}
+      M15: {n_fractale: 5}
+      H1:  {n_fractale: 5}
+      H4:  {n_fractale: 5}
+      D1:  {n_fractale: 5}
+
+  # ---------------------------------------------------------------------------
+  # Entropie
+  # ---------------------------------------------------------------------------
+  shannon:
+    timeframes:
+      M1:  {fenetre: 200, n_bins: 10}
+      M5:  {fenetre: 200, n_bins: 10}
+      M15: {fenetre: 150, n_bins: 10}
+      H1:  {fenetre: 100, n_bins: 10}
+      H4:  {fenetre: 50,  n_bins: 10}
+      D1:  {fenetre: 30,  n_bins: 10}
+    seuil_ordonne: 0.65
+    seuil_desordre: 0.78
+
+  # ---------------------------------------------------------------------------
+  # Vecteurs
+  # ---------------------------------------------------------------------------
+  pca_axis:
+    timeframes:
+      M1:  {fenetre: 200}
+      M5:  {fenetre: 200}
+      M15: {fenetre: 150}
+      H1:  {fenetre: 100}
+      H4:  {fenetre: 50}
+      D1:  {fenetre: 30}
+    seuil_direction: 0.3
+    seuil_eigen_ratio: 0.65
+
+  # ---------------------------------------------------------------------------
+  # Misc
+  # ---------------------------------------------------------------------------
+  minkowski_causal:
+    fenetre_c: 500
+    min_periods_c: 250
+    q_c: 0.90
+    seuil_lightlike: 0.01
+
+  # ---------------------------------------------------------------------------
+  # Volume
+  # ---------------------------------------------------------------------------
+  # Ces méthodes requièrent des données tick (colonnes `bid_volume`,
+  # `ask_volume`) ou du moins `volume` et `tick_count`. Elles ne
+  # fonctionnent pas sur des parquets OHLCV sans volume.
+  #
+  # Rappel : le volume Dukascopy est une mesure de profondeur observée,
+  # pas un volume exécuté. Voir `doc/volume.md`.
+  ofi:
+    timeframes:
+      M1:  {fenetre: 20}
+      M5:  {fenetre: 20}
+      M15: {fenetre: 20}
+      M30: {fenetre: 20}
+      H1:  {fenetre: 20}
+      H4:  {fenetre: 20}
+      D1:  {fenetre: 10}
+    seuil_pression: 0.1
+
+  divergence_pv:
+    timeframes:
+      M1:  {fenetre_extreme: 20, fenetre_median_vol: 50}
+      M5:  {fenetre_extreme: 20, fenetre_median_vol: 50}
+      M15: {fenetre_extreme: 20, fenetre_median_vol: 50}
+      M30: {fenetre_extreme: 20, fenetre_median_vol: 50}
+      H1:  {fenetre_extreme: 20, fenetre_median_vol: 50}
+      H4:  {fenetre_extreme: 20, fenetre_median_vol: 50}
+      D1:  {fenetre_extreme: 20, fenetre_median_vol: 30}
+    ratio_volume_fort: 1.5
+
+# ---------------------------------------------------------------------------
+# Contexte temporel
+# ---------------------------------------------------------------------------
+# Toutes les heures sont exprimées dans le fuseau `reference_tz`.
+# Voir `doc/context.md` pour la sémantique.
+#
+# Cette configuration est activée uniquement si le CLI reçoit
+# l'option `--with-context`. Sans cette option, aucune colonne `ctx_*`
+# n'est produite.
+
+context:
+  # Fuseau de référence : toutes les bornes horaires ci-dessous y sont
+  # exprimées. New York est le pivot du marché forex et l'heure de
+  # référence du rollover (17:00 NY).
+  reference_tz: "America/New_York"
+
+  # Sessions de marché. Clés = noms libres utilisés dans la colonne
+  # `ctx_session`. Les bornes sont au format "HH:MM".
+  #
+  # Une session peut chevaucher minuit (ex. ASIE 19:00 → 03:00).
+  # L'affectation d'une barre se fait selon l'heure de son début.
+  sessions:
+    ASIE:    {debut: "19:00", fin: "03:00"}
+    LONDRES: {debut: "03:00", fin: "08:00"}
+    OVERLAP: {debut: "08:00", fin: "12:00"}
+    NY:      {debut: "12:00", fin: "17:00"}
+
+  # Fenêtre de rollover forex. `null` si absente (crypto, actions).
+  rollover:
+    debut: "17:00"
+    fin:   "18:00"
+
+  # Événements macro. `fichier` peut être null (aucun événement).
+  # Les fenêtres (`avant_min`, `apres_min`) sont en minutes.
+  events:
+    fichier: "context/data/events_forex.csv"
+    fenetres:
+      NFP:  {avant_min: 5, apres_min: 60}
+      CPI:  {avant_min: 5, apres_min: 60}
+      FOMC: {avant_min: 5, apres_min: 90}
+
+  # Jours fériés. `fichier` peut être null (pas de fériés).
+  holidays:
+    fichier: "context/data/holidays_forex.csv"
+
+# ---------------------------------------------------------------------------
+# Projection (phase 6)
+# ---------------------------------------------------------------------------
+segmentation:
+  modele: normal
+  pen: 50.0
+  min_size: 20

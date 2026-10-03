@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "regime_lib"
+version = "0.1.0"
+description = "Bibliothèque de détection de régimes de marché multi-méthodes."
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Djamal Raouf" }]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pyarrow>=14.0",
+    "hmmlearn>=0.3",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+]
+docs = [
+    "sphinx>=7",
+    "myst-parser>=2",
+    "sphinx-rtd-theme>=2",
+]
+
+[project.scripts]
+regime-lib = "regime_lib.cli:main"
+regime-report = "regime_lib.utils.report:main"
+
+[tool.setuptools.packages.find]
+include = ["regime_lib*"]
+exclude = ["regime_lib.docs*", "tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning:hmmlearn.*",
+]

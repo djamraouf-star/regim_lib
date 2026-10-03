@@ -1,0 +1,141 @@
+"""
+Mesure d'accord entre méthodes et segments.
+
+Objectif
+--------
+Pour chaque méthode, on mesure dans quelle mesure ses régimes
+correspondent à la structure du prix identifiée par la segmentation.
+
+Trois indicateurs :
+
+1. **Pureté par segment** : pour chaque segment, quelle fraction des
+   barres partage le régime majoritaire ? Un segment avec pureté 1.0
+   signifie que la méthode lui attribue un seul régime — signe de
+   cohérence.
+
+2. **Pureté moyenne pondérée** : moyenne des puretés, pondérée par la
+   durée des segments. Mesure globale de cohérence.
+
+3. **Nombre de régimes par segment** : combien de régimes différents
+   apparaissent dans un segment. Plus ce nombre est bas, plus la
+   méthode est cohérente avec la segmentation.
+
+Ces mesures ne disent PAS qu'une méthode est « correcte ». Elles
+mesurent sa **cohérence interne** avec la partition du prix.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+
+def purete_par_segment(
+    regimes: pd.Series,
+    segment_id: pd.Series,
+) -> pd.DataFrame:
+    """
+    Pureté des régimes par segment.
+
+    Parameters
+    ----------
+    regimes : pd.Series
+        Régime par barre (résultat d'une méthode).
+    segment_id : pd.Series
+        Segment par barre (résultat de `segmenter_dataframe`).
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexé par `segment_id`, colonnes :
+        - n_barres : taille du segment
+        - regime_dominant : régime le plus fréquent
+        - purete : fraction des barres dans le régime dominant
+        - n_regimes : nombre de régimes distincts dans le segment
+        - regimes : liste des régimes présents (utile pour debug)
+    """
+    if len(regimes) != len(segment_id):
+        raise ValueError(
+            "regimes et segment_id doivent avoir la même longueur."
+        )
+
+    tmp = pd.DataFrame({
+        "regime": regimes.values,
+        "segment_id": segment_id.values,
+    })
+
+    rows: list[dict] = []
+    for sid, g in tmp.groupby("segment_id", sort=True):
+        counts = g["regime"].value_counts()
+        total = len(g)
+        rows.append({
+            "segment_id": int(sid),
+            "n_barres": total,
+            "regime_dominant": counts.index[0],
+            "purete": float(counts.iloc[0] / total),
+            "n_regimes": int(len(counts)),
+            "regimes": counts.to_dict(),
+        })
+
+    return pd.DataFrame(rows).set_index("segment_id")
+
+
+def purete_globale_ponderee(
+    purete_df: pd.DataFrame,
+) -> float:
+    """
+    Pureté moyenne pondérée par la taille des segments.
+    """
+    if len(purete_df) == 0:
+        return 0.0
+    poids = purete_df["n_barres"]
+    return float(
+        (purete_df["purete"] * poids).sum() / poids.sum()
+    )
+
+
+def nombre_moyen_regimes_par_segment(
+    purete_df: pd.DataFrame,
+) -> float:
+    """Nombre moyen de régimes distincts par segment."""
+    if len(purete_df) == 0:
+        return 0.0
+    return float(purete_df["n_regimes"].mean())
+
+
+def comparer_methodes(
+    methodes: dict[str, pd.Series],
+    segment_id: pd.Series,
+) -> pd.DataFrame:
+    """
+    Tableau comparatif des méthodes.
+
+    Parameters
+    ----------
+    methodes : dict[str, pd.Series]
+        {nom_methode: régimes par barre}.
+    segment_id : pd.Series
+        Segment par barre.
+
+    Returns
+    -------
+    pd.DataFrame
+        Une ligne par méthode avec :
+        - purete_ponderee : pureté moyenne pondérée ∈ [0, 1]
+        - n_regimes_moy : nombre moyen de régimes par segment
+        - purete_min : pureté du segment le moins pur
+        - purete_max : pureté du segment le plus pur
+        - n_segments_purs : nombre de segments à pureté = 1.0
+    """
+    rows: list[dict] = []
+    for name, regimes in methodes.items():
+        p = purete_par_segment(regimes, segment_id)
+        rows.append({
+            "methode": name,
+            "purete_ponderee": purete_globale_ponderee(p),
+            "n_regimes_moy": nombre_moyen_regimes_par_segment(p),
+            "purete_min": float(p["purete"].min()) if len(p) else 0.0,
+            "purete_max": float(p["purete"].max()) if len(p) else 0.0,
+            "n_segments_purs": int((p["purete"] == 1.0).sum()),
+        })
+    return pd.DataFrame(rows).set_index("methode")

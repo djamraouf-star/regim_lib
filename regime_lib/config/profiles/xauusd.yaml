@@ -1,0 +1,32 @@
+# Profil XAUUSD — or spot.
+#
+# Ce profil hérite intégralement de `default.yaml`. Les paramètres
+# EURUSD seront utilisés pour le premier run, puis calibrés après
+# observation des distributions sur l'or.
+#
+# Caractéristiques propres à XAUUSD (à valider empiriquement) :
+#   - volatilité ~2-3× supérieure à EURUSD (en valeur relative)
+#   - gaps fréquents (ouvertures, sessions)
+#   - microstructure différente (spread plus large)
+#   - ticks plus nombreux (résolution de prix 0.001 vs 0.00001)
+#
+# Voir `doc/config.md` pour la structure des profils et la cascade
+# de résolution des paramètres.
+
+nom: xauusd
+type: metal_precieux
+description: "XAUUSD — or spot. À calibrer après premier run."
+
+# Pas de surcharge pour l'instant. Le profil hérite de default.yaml.
+# Après le premier run, ajouter les surcharges ici, par exemple :
+#
+# methodes:
+#   atr_volatility:
+#     timeframes:
+#       H1: {n_atr: 20, fenetre: 500, min_periods: 250}
+#   adx:
+#     seuil_range: 22.0
+#     seuil_tendance: 28.0
+#   shannon:
+#     seuil_ordonne: 0.60
+#     seuil_desordre: 0.80
