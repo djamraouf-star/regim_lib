@@ -2,9 +2,38 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from regime_lib.study import Study
+
+
+def test_study_uses_provided_timeframe_ohlcv(monkeypatch):
+    index = pd.date_range(
+        "2026-01-01", periods=4, freq="5min", tz="UTC", name="timestamp"
+    )
+    ohlcv = pd.DataFrame(
+        {"close": [1.0, 2.0, 4.0, 8.0]},
+        index=index,
+    )
+    study = Study(
+        regimes_path="unused.parquet",
+        ohlcv_path="unused.parquet",
+        ohlcv_data=ohlcv,
+        targets=["ret_fwd_1"],
+    )
+
+    def fail_load(_):
+        raise AssertionError("Study should use the supplied timeframe bars")
+
+    monkeypatch.setattr("regime_lib.study.study.load_parquet", fail_load)
+    study._charger_cibles()
+
+    np.testing.assert_allclose(
+        study.df_cibles["ret_fwd_1"].iloc[:3],
+        [np.log(2.0), np.log(2.0), np.log(2.0)],
+    )
+    assert study.df_cibles["ret_fwd_1"].iloc[-1:].isna().all()
 
 
 def test_save_serializes_mixed_modalities_as_labels(tmp_path):

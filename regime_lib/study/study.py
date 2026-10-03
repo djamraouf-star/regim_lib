@@ -62,6 +62,7 @@ class Study:
         methodes_causales_only: bool = True,
         split: str = "in_sample",
         tests_modalite: bool = True,
+        ohlcv_data: pd.DataFrame | None = None,
         **split_kwargs,
     ) -> None:
         if split not in SCHEMAS_SPLIT:
@@ -72,6 +73,7 @@ class Study:
 
         self.regimes_path = Path(regimes_path)
         self.ohlcv_path = Path(ohlcv_path)
+        self.ohlcv_data = ohlcv_data
 
         if features is None:
             features = ["regime"]
@@ -114,9 +116,12 @@ class Study:
         self.df_features = df_features
 
     def _charger_cibles(self) -> None:
-        # Charger le OHLCV. Le pipeline détecte automatiquement le format
-        # (barres ou ticks) via data_loader.
-        df_ohlcv, _ = load_parquet(str(self.ohlcv_path))
+        if self.ohlcv_data is None:
+            # Le pipeline détecte automatiquement le format (barres ou
+            # ticks) via data_loader.
+            df_ohlcv, _ = load_parquet(str(self.ohlcv_path))
+        else:
+            df_ohlcv = self.ohlcv_data
         cibles = {}
         for nom in self.noms_cibles:
             cibles[nom] = calculer_cible(df_ohlcv, nom)

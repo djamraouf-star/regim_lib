@@ -56,20 +56,12 @@ import pandas as pd
 
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
-
-
-# Grille attendue (secondes) par timeframe — utilisée pour la détection
-# numpy des barres hors grille.
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60,
-    "M5": 300,
-    "M15": 900,
-    "M30": 1800,
-    "H1": 3600,
-    "H4": 14400,
-    "D1": 86400,
-    "W1": 604800,
-}
+from regime_lib.core.utils import (
+    TIMEFRAME_SECONDS as _TIMEFRAME_SECONDS,
+    true_range,
+    direction,
+    unaligned_mask,
+)
 
 
 @register_method
@@ -191,67 +183,6 @@ class ATRVolatilityDetector(RegimeDetector):
             )
 
     # ------------------------------------------------------------------
-    # Helpers numpy
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _true_range(
-        high: np.ndarray, low: np.ndarray, close: np.ndarray
-    ) -> np.ndarray:
-        """
-        True Range vectorisé.
-
-        Pour t = 0, on utilise close[0] comme close précédent, ce qui donne
-        TR[0] = high[0] - low[0].
-        """
-        prev_close = np.empty_like(close)
-        prev_close[0] = close[0]
-        prev_close[1:] = close[:-1]
-
-        tr_hl = high - low
-        tr_hc = np.abs(high - prev_close)
-        tr_lc = np.abs(low - prev_close)
-        return np.fmax(np.fmax(tr_hl, tr_hc), tr_lc)
-
-    @staticmethod
-    def _direction(close: np.ndarray, n: int) -> np.ndarray:
-        """sign(close[t] - close[t-n]), NaN pour les n premières barres."""
-        out = np.full(close.shape, np.nan, dtype=float)
-        if n < len(close):
-            out[n:] = np.sign(close[n:] - close[:-n])
-        return out
-
-    @staticmethod
-    def _unaligned_mask(
-        index: pd.DatetimeIndex, timeframe: str | None
-    ) -> np.ndarray:
-        """
-        Masque numpy : True si le timestamp n'est pas aligné sur la grille
-        du timeframe (multiple du pas en secondes depuis l'epoch UTC).
-
-        Sert de repli quand `is_partial` n'est pas fourni : une barre hors
-        grille est très probablement une barre tronquée.
-
-        Note : on ne suppose PAS que la résolution interne du DatetimeIndex
-        soit en nanosecondes. Selon les versions de pandas et la façon dont
-        l'index a été construit (`pd.date_range`, `pd.to_datetime`, lecture
-        parquet…), la résolution native peut être 's', 'ms', 'us' ou 'ns'.
-        `.asi8` retourne alors des entiers dans cette unité, et un diviseur
-        codé en dur donne des résultats faux. On convertit donc via une
-        soustraction de Timedelta, indépendante de la résolution.
-        """
-        step = _TIMEFRAME_SECONDS.get(timeframe or "")
-        if step is None or len(index) == 0:
-            return np.zeros(len(index), dtype=bool)
-        if index.tz is not None:
-            epoch = pd.Timestamp("1970-01-01", tz="UTC")
-        else:
-            epoch = pd.Timestamp("1970-01-01")
-        ts_s = np.asarray(
-            (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-        )
-        return (ts_s % step) != 0
-
-    # ------------------------------------------------------------------
     # fit_predict
     # ------------------------------------------------------------------
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -272,13 +203,13 @@ class ATRVolatilityDetector(RegimeDetector):
         close = out["close"].to_numpy(dtype=float)
 
         # --- 1) ATR causal ---
-        tr = self._true_range(high, low, close)
+        tr = true_range(high, low, close)
         atr = pd.Series(tr, index=out.index).rolling(
             self.n_atr, min_periods=1
         ).mean()
 
         # --- 2) Direction causale ---
-        direction = self._direction(close, self.n_direction)
+        direction_arr = direction(close, self.n_direction)
 
         # --- 3) Seuils de quantile CAUSAUX ---
         atr_past = atr.shift(1)
@@ -296,8 +227,8 @@ class ATRVolatilityDetector(RegimeDetector):
 
         ready = ~np.isnan(atr_v) & ~np.isnan(s_low) & ~np.isnan(s_high)
         mask_range = ready & (atr_v <= s_low)
-        mask_up = ready & (atr_v >= s_high) & (direction > 0)
-        mask_down = ready & (atr_v >= s_high) & (direction < 0)
+        mask_up = ready & (atr_v >= s_high) & (direction_arr > 0)
+        mask_down = ready & (atr_v >= s_high) & (direction_arr < 0)
 
         regime = np.full(n, "INCONNU", dtype=object)
         regime[mask_range] = "RANGE"
@@ -328,7 +259,7 @@ class ATRVolatilityDetector(RegimeDetector):
             regime[partial] = "INCONNU"
             confidence[partial] = 0.0
         else:
-            unaligned = self._unaligned_mask(out.index, self.timeframe)
+            unaligned = unaligned_mask(out.index, self.timeframe)
             regime[unaligned] = "INCONNU"
             confidence[unaligned] = 0.0
 

@@ -43,12 +43,11 @@ import pandas as pd
 
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
-
-
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
-    "H1": 3600, "H4": 14400, "D1": 86400, "W1": 604800,
-}
+from regime_lib.core.utils import (
+    TIMEFRAME_SECONDS as _TIMEFRAME_SECONDS,
+    direction,
+    unaligned_mask,
+)
 
 
 @register_method
@@ -157,31 +156,6 @@ class ERKaufmanDetector(RegimeDetector):
         er[n:] = np.clip(ratio, 0.0, 1.0)
         return er
 
-    @staticmethod
-    def _direction(close: np.ndarray, n: int) -> np.ndarray:
-        """sign(close[t] - close[t-n]), NaN pour les n premières barres."""
-        out = np.full(close.shape, np.nan, dtype=float)
-        if n < len(close):
-            out[n:] = np.sign(close[n:] - close[:-n])
-        return out
-
-    @staticmethod
-    def _unaligned_mask(
-        index: pd.DatetimeIndex, timeframe: str | None
-    ) -> np.ndarray:
-        """True si le timestamp n'est pas aligné sur la grille du timeframe."""
-        step = _TIMEFRAME_SECONDS.get(timeframe or "")
-        if step is None or len(index) == 0:
-            return np.zeros(len(index), dtype=bool)
-        if index.tz is not None:
-            epoch = pd.Timestamp("1970-01-01", tz="UTC")
-        else:
-            epoch = pd.Timestamp("1970-01-01")
-        ts_s = np.asarray(
-            (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-        )
-        return (ts_s % step) != 0
-
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
         out.columns = [
@@ -197,7 +171,7 @@ class ERKaufmanDetector(RegimeDetector):
         close = out["close"].to_numpy(dtype=float)
 
         er = self._efficiency_ratio(close, self.n_er)
-        direction = self._direction(close, self.n_er)
+        direction_arr = direction(close, self.n_er)
 
         er_series = pd.Series(er, index=out.index)
         er_past = er_series.shift(1)
@@ -215,9 +189,9 @@ class ERKaufmanDetector(RegimeDetector):
 
         mask_chop = ready & (er <= s_chop)
         mask_range = ready & (er > s_chop) & (er < s_tend)
-        mask_up = ready & (er >= s_tend) & (direction > 0)
-        mask_down = ready & (er >= s_tend) & (direction < 0)
-        mask_ambigu = ready & (er >= s_tend) & (direction == 0)
+        mask_up = ready & (er >= s_tend) & (direction_arr > 0)
+        mask_down = ready & (er >= s_tend) & (direction_arr < 0)
+        mask_ambigu = ready & (er >= s_tend) & (direction_arr == 0)
 
         regime = np.full(n_rows, "INCONNU", dtype=object)
         regime[mask_chop] = "CHOP"
@@ -248,7 +222,7 @@ class ERKaufmanDetector(RegimeDetector):
             regime[partial] = "INCONNU"
             confidence[partial] = 0.0
         else:
-            unaligned = self._unaligned_mask(out.index, self.timeframe)
+            unaligned = unaligned_mask(out.index, self.timeframe)
             regime[unaligned] = "INCONNU"
             confidence[unaligned] = 0.0
 

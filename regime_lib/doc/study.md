@@ -124,7 +124,7 @@ from regime_lib.study import Study
 
 etude = Study(
     regimes_path="results/regimes.parquet",
-    ohlcv_path="actifs/EURUSD/EURUSD_Tick_...parquet",
+    ohlcv_path="data/EURUSD_Tick_...parquet",
     features=["regime"],
     targets=["ret_fwd_5", "vol_fwd_20"],
     methodes=["adx", "er_kaufman"],
@@ -149,7 +149,7 @@ tests = etude.tests_modalite_pour(
 )
 print(tests)
 
-etude.save("analyses/EURUSD/output/")
+etude.save("results/study/")
 # Produit :
 #   study_results.parquet         (métriques principales)
 #   study_tests_modalite.parquet  (tests par modalité)
@@ -164,51 +164,3 @@ etude = Study(
 etude.run()
 # etude.resultats contient une ligne par fold
 ```
-
-## 8. Criblage complet EURUSD et recherche sur les sessions
-
-Le script [`screening_eurusd.py`](../../analyses/EURUSD/scripts/screening_eurusd.py)
-exécute un criblage reproductible à partir du Parquet OHLCV ou tick :
-
-```bash
-python analyses/EURUSD/scripts/screening_eurusd.py
-```
-
-Par défaut, il traite `M5` et `H1`, utilise le profil `eurusd`, crible les
-méthodes causales disponibles et évalue les cibles
-`ret`, `vol`, `dd` et `ru` aux horizons de 1, 3, 6, 12 et 24 barres. Chaque
-timeframe est lancé et évalué séparément : un horizon correspond toujours
-au nombre de barres de ce timeframe. Les folds sont chronologiques
-walk-forward et l'embargo vaut au moins le plus grand horizon.
-
-Le script relance le CLI avec `--with-context`, puis produit :
-
-- `method_screening/` : métriques train/test par méthode et régime ;
-- `context_screening/` : criblage des sessions du profil, heures NY, jours
-  de semaine, rollover, fériés et événements ;
-- `session_regime_screening.parquet` : comparaison des régimes entre eux
-  **au sein de chaque session**, uniquement sur les folds de test. Les
-  lignes avec `INCONNU` et `HORS_SESSION` sont exclues de cette comparaison.
-
-Les p-values du criblage croisé sont accompagnées de valeurs q corrigées
-par Benjamini-Hochberg, séparément par fold, méthode et cible. Cette
-correction limite les faux positifs dus aux comparaisons multiples ; elle
-ne corrige pas la dépendance temporelle des rendements qui se chevauchent.
-Les résultats restent exploratoires et doivent être confirmés sur une
-période indépendante.
-
-Options usuelles :
-
-```bash
-python analyses/EURUSD/scripts/screening_eurusd.py \
-  --timeframes M15,H1 \
-  --horizons 1,4,12 \
-  --families ret,vol \
-  --folds 6 \
-  --output analyses/EURUSD/output/criblage_m15_h1
-```
-
-Par défaut, les résultats sont écrits dans un nouveau dossier horodaté
-sous `analyses/EURUSD/output/`. Un dossier non vide est refusé pour éviter
-d'écraser des sorties existantes ; `--overwrite` permet explicitement de
-réutiliser un dossier.

@@ -41,12 +41,10 @@ import pandas as pd
 
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
-
-
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
-    "H1": 3600, "H4": 14400, "D1": 86400, "W1": 604800,
-}
+from regime_lib.core.utils import (
+    TIMEFRAME_SECONDS as _TIMEFRAME_SECONDS,
+    unaligned_mask,
+)
 
 
 def _construire_features(df: pd.DataFrame) -> np.ndarray:
@@ -174,17 +172,8 @@ class PCAAxisDetector(RegimeDetector):
     def _unaligned_mask(
         index: pd.DatetimeIndex, timeframe: str | None
     ) -> np.ndarray:
-        step = _TIMEFRAME_SECONDS.get(timeframe or "")
-        if step is None or len(index) == 0:
-            return np.zeros(len(index), dtype=bool)
-        if index.tz is not None:
-            epoch = pd.Timestamp("1970-01-01", tz="UTC")
-        else:
-            epoch = pd.Timestamp("1970-01-01")
-        ts_s = np.asarray(
-            (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-        )
-        return (ts_s % step) != 0
+        """Delegue vers regime_lib.core.utils.unaligned_mask."""
+        return unaligned_mask(index, timeframe)
 
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
@@ -251,7 +240,7 @@ class PCAAxisDetector(RegimeDetector):
             eigen_ratio[partial] = np.nan
             var_ratio[partial] = np.nan
         else:
-            unaligned = self._unaligned_mask(out.index, self.timeframe)
+            unaligned = unaligned_mask(out.index, self.timeframe)
             regime[unaligned] = "INCONNU"
             confidence[unaligned] = 0.0
             direction[unaligned] = np.nan

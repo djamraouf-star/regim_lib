@@ -13,5 +13,7 @@ fraction de l'activité mondiale. Voir `doc/volume.md`.
 Ce module importe explicitement chaque méthode concrète.
 """
 
-from regime_lib.methods.volume import ofi  # noqa: F401
-from regime_lib.methods.volume import divergence_pv  # noqa: F401
+from regime_lib.methods.volume import divergence_pv   # noqa: F401
+from regime_lib.methods.volume import ofi             # noqa: F401
+from regime_lib.methods.volume import volume_profile  # noqa: F401
+from regime_lib.methods.volume import vpin            # noqa: F401

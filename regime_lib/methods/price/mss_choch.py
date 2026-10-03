@@ -46,69 +46,15 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from numpy.lib.stride_tricks import sliding_window_view
 
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
-
-
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
-    "H1": 3600, "H4": 14400, "D1": 86400, "W1": 604800,
-}
-
-
-def _detect_fractals(
-    high: np.ndarray, low: np.ndarray, n_fractale: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Détection de fractales strictes (même logique que `price_action`).
-    """
-    n = len(high)
-    window = 2 * n_fractale + 1
-    is_sommet = np.zeros(n, dtype=bool)
-    is_creux = np.zeros(n, dtype=bool)
-    if n < window:
-        return is_sommet, is_creux
-
-    h_win = sliding_window_view(high, window)
-    l_win = sliding_window_view(low, window)
-
-    center = n_fractale
-    mask = np.ones(window, dtype=bool)
-    mask[center] = False
-
-    is_sommet_win = np.all(h_win[:, center, None] > h_win[:, mask], axis=1)
-    is_creux_win = np.all(l_win[:, center, None] < l_win[:, mask], axis=1)
-
-    is_sommet[n_fractale:n - n_fractale] = is_sommet_win
-    is_creux[n_fractale:n - n_fractale] = is_creux_win
-    return is_sommet, is_creux
-
-
-def _build_alternating_pivots(
-    is_sommet: np.ndarray,
-    is_creux: np.ndarray,
-    high: np.ndarray,
-    low: np.ndarray,
-) -> list[tuple[int, str, float]]:
-    """
-    Construit la liste chronologique des pivots strictement alternés S/C.
-    """
-    n = len(high)
-    pivots: list[tuple[int, str, float]] = []
-    for i in range(n):
-        if is_sommet[i]:
-            if not pivots or pivots[-1][1] == 'C':
-                pivots.append((i, 'S', float(high[i])))
-            elif high[i] > pivots[-1][2]:
-                pivots[-1] = (i, 'S', float(high[i]))
-        if is_creux[i]:
-            if not pivots or pivots[-1][1] == 'S':
-                pivots.append((i, 'C', float(low[i])))
-            elif low[i] < pivots[-1][2]:
-                pivots[-1] = (i, 'C', float(low[i]))
-    return pivots
+from regime_lib.core.utils import (
+    TIMEFRAME_SECONDS as _TIMEFRAME_SECONDS,
+    detect_fractals as _detect_fractals,
+    build_alternating_pivots as _build_alternating_pivots,
+    unaligned_mask,
+)
 
 
 def _classify_mss_choch(
@@ -244,17 +190,8 @@ class MSSCHOCHDetector(RegimeDetector):
     def _unaligned_mask(
         index: pd.DatetimeIndex, timeframe: str | None
     ) -> np.ndarray:
-        step = _TIMEFRAME_SECONDS.get(timeframe or "")
-        if step is None or len(index) == 0:
-            return np.zeros(len(index), dtype=bool)
-        if index.tz is not None:
-            epoch = pd.Timestamp("1970-01-01", tz="UTC")
-        else:
-            epoch = pd.Timestamp("1970-01-01")
-        ts_s = np.asarray(
-            (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-        )
-        return (ts_s % step) != 0
+        """Delegue vers regime_lib.core.utils.unaligned_mask."""
+        return unaligned_mask(index, timeframe)
 
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
@@ -292,7 +229,7 @@ class MSSCHOCHDetector(RegimeDetector):
             regime[partial] = "INCONNU"
             confidence[partial] = 0.0
         else:
-            unaligned = self._unaligned_mask(out.index, self.timeframe)
+            unaligned = unaligned_mask(out.index, self.timeframe)
             regime[unaligned] = "INCONNU"
             confidence[unaligned] = 0.0
 
