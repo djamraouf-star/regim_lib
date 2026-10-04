@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from regime_lib.utils.validation import validate_alignment, validity_mask
 
 
 def projeter_barres(
@@ -51,8 +52,11 @@ def projeter_barres(
         DataFrame avec l'index de `df`, colonnes :
         segment_id + toutes les colonnes de features (sauf debut/fin).
     """
-    if len(df) != len(segment_id):
-        raise ValueError("df et segment_id doivent avoir la même longueur.")
+    validate_alignment(df.index, segment_id.index)
+    if segment_id.isna().any() or features.index.has_duplicates:
+        raise ValueError("Segments manquants ou caractéristiques dupliquées.")
+    if not segment_id.isin(features.index).all():
+        raise ValueError("Caractéristiques absentes pour certains segments.")
 
     seg_series = pd.Series(
         segment_id.values, index=df.index, name="segment_id"
@@ -68,7 +72,13 @@ def projeter_barres(
     )
     feats_par_barre.index = df.index
 
-    return pd.concat([seg_series, feats_par_barre], axis=1)
+    result = pd.concat([seg_series, feats_par_barre], axis=1)
+    result["is_valid"] = validity_mask(df) & validity_mask(result)
+    for col in ("is_partial", "coverage"):
+        if col in df:
+            result[col] = df[col]
+    result.attrs.update(df.attrs)
+    return result
 
 
 def croiser_methodes_segments(
@@ -101,13 +111,25 @@ def croiser_methodes_segments(
 
     cols_features = [
         c for c in ref.columns
-        if c not in ("regime", "confidence")
+        if c not in ("regime", "confidence", "is_valid", "is_warmup")
     ]
     result = ref[cols_features].copy()
+    common_valid = pd.Series(True, index=ref.index)
 
     for name, proj in projections.items():
-        result[f"{name}_regime"] = proj["regime"]
+        validate_alignment(ref.index, proj.index)
+        for field in ("asset", "timeframe", "source", "price_side", "calendar"):
+            if ref.attrs.get(field) != proj.attrs.get(field):
+                raise ValueError(f"Identité de projection incompatible : {field}.")
+        for col in cols_features:
+            if col not in proj or not ref[col].equals(proj[col]):
+                raise ValueError(f"Caractéristique commune différente : {col}.")
+        result[f"{name}_regime"] = proj["regime"].where(validity_mask(proj))
+        common_valid &= validity_mask(proj)
         if "confidence" in proj.columns:
-            result[f"{name}_confidence"] = proj["confidence"]
+            result[f"{name}_confidence"] = proj["confidence"].where(validity_mask(proj))
+
+    result["is_valid"] = common_valid
+    result.attrs.update(ref.attrs)
 
     return result

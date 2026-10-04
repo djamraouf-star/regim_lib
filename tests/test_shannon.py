@@ -221,6 +221,10 @@ def test_window_is_strictly_past():
     # Perturber close[i_test + 1] (futur immédiat)
     df_mod = df.copy()
     df_mod.iloc[i_test + 1, df_mod.columns.get_loc("close")] *= 1.10
+    # La perturbation reste une barre OHLC cohérente.
+    df_mod.iloc[i_test + 1, df_mod.columns.get_loc("high")] = max(
+        df_mod["high"].iloc[i_test + 1], df_mod["close"].iloc[i_test + 1]
+    )
     out_mod = det.fit_predict(df_mod)
     val_mod = out_mod["shannon_value"].iloc[i_test]
 

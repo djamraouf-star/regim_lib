@@ -40,6 +40,8 @@ en optimisation ultérieure.
 
 from __future__ import annotations
 
+from regime_lib.utils.validation import validated_detector
+
 import numpy as np
 import pandas as pd
 
@@ -204,6 +206,7 @@ class VolumeProfileDetector(RegimeDetector):
     # ------------------------------------------------------------------
     # fit_predict
     # ------------------------------------------------------------------
+    @validated_detector
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
         out.columns = [c.lower() if isinstance(c, str) else c

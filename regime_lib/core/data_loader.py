@@ -60,23 +60,15 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
-from regime_lib.utils.validation import validate_ohlcv
+from regime_lib.utils.validation import validate_ohlcv, validity_mask
+from regime_lib.core.temporal import (
+    TIMEFRAME_RULES, TIMEFRAME_SECONDS, grid_origin, resolve_timeframe, expected_grid,
+)
 
 
 # ---------------------------------------------------------------------------
 # Constantes
 # ---------------------------------------------------------------------------
-TIMEFRAME_RULES: Final[dict[str, str]] = {
-    "M1": "1min",
-    "M5": "5min",
-    "M15": "15min",
-    "M30": "30min",
-    "H1": "1h",
-    "H4": "4h",
-    "D1": "1D",
-    "W1": "1W",
-}
-
 OHLCV_AGG: Final[dict] = {
     "open": "first",
     "high": "max",
@@ -283,8 +275,12 @@ def _preparer_tick(
     index UTC, colonnes obligatoires, tri stable, bid ≤ ask, garde-fou de
     sauts.
     """
-    if "timestamp" in df.columns:
-        df = df.set_index("timestamp")
+    df = _normalize_columns(df)
+    ts_columns = [c for c in TICK_TIMESTAMP_COLUMNS if c in df.columns]
+    if len(ts_columns) > 1:
+        raise ValueError("Plusieurs colonnes temporelles tick : sélection ambiguë.")
+    if ts_columns:
+        df = df.set_index(ts_columns[0])
     elif not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError(
             "Le parquet tick doit avoir un DatetimeIndex ou une "
@@ -292,7 +288,7 @@ def _preparer_tick(
         )
 
     if not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.DatetimeIndex(df.index)
+        df.index = pd.DatetimeIndex(pd.to_datetime(df.index, errors="raise"))
 
     df = _ensure_utc_index(df)
 
@@ -305,6 +301,15 @@ def _preparer_tick(
 
     if not df.index.is_monotonic_increasing:
         df = df.sort_index(kind="stable")
+
+    if df.index.hasnans:
+        raise ValueError("Timestamp tick manquant.")
+    for col in _COLONNES_TICK:
+        df[col] = pd.to_numeric(df[col], errors="raise")
+    values = df[list(_COLONNES_TICK)].to_numpy(dtype=float)
+    if (not np.isfinite(values).all() or (values[:, :2] <= 0).any()
+            or (values[:, 2:] < 0).any()):
+        raise ValueError("Prix tick positifs et volumes non négatifs, tous finis, requis.")
 
     spread = df["askPrice"] - df["bidPrice"]
     if (spread < 0).any():
@@ -341,55 +346,12 @@ def _charger_tick_par_lots(
 ) -> pd.DataFrame:
     """Charge un parquet tick local en streaming par lots."""
     parquet = pq.ParquetFile(path)
-    norm_vers_reel = {
-        _normalize_column_name(c): c for c in parquet.schema.names
-    }
-    ts_col = next(
-        (norm_vers_reel[c] for c in TICK_TIMESTAMP_COLUMNS
-         if c in norm_vers_reel),
-        None,
-    )
-    if ts_col is None:
-        raise ValueError(
-            "Aucune colonne timestamp/datetime/date/time trouvée."
-        )
-
-    canonique_vers_reel: dict[str, str] = {}
-    for col in parquet.schema.names:
-        norm = _normalize_column_name(col)
-        if norm in _COLONNES_TICK:
-            canonique_vers_reel[norm] = col
-
-    manquantes = [
-        c for c in _COLONNES_TICK if c not in canonique_vers_reel
-    ]
-    if manquantes:
-        raise ValueError(
-            f"Colonnes tick manquantes dans le parquet : {manquantes}."
-        )
-
-    cols_a_lire = [ts_col] + [
-        canonique_vers_reel[c] for c in _COLONNES_TICK
-    ]
-
-    chunks: list[pd.DataFrame] = []
-    for batch in parquet.iter_batches(
-        batch_size=batch_size, columns=cols_a_lire
-    ):
-        chunk = batch.to_pandas()
-        renommage = {ts_col: "timestamp"}
-        for canon, reel in canonique_vers_reel.items():
-            renommage[reel] = canon
-        chunk = chunk.rename(columns=renommage)
-        chunks.append(chunk)
-
-    df = pd.concat(chunks, ignore_index=True)
-    df["timestamp"] = pd.to_datetime(
-        df["timestamp"], utc=True, errors="raise"
-    )
-    df = df.set_index("timestamp")
-    df.index.name = "timestamp"
-    return df
+    if batch_size <= 0:
+        raise ValueError("batch_size doit être strictement positif.")
+    chunks = [batch.to_pandas() for batch in parquet.iter_batches(batch_size=batch_size)]
+    if not chunks:
+        return _normalize_columns(parquet.read().to_pandas())
+    return _normalize_columns(pd.concat(chunks))
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +381,7 @@ def agreger_tick(
         [T - période, T).
     """
     _check_price_side(prix)
+    df_tick = _preparer_tick(df_tick)
     if timeframe not in TIMEFRAME_RULES:
         raise ValueError(
             f"Timeframe inconnu : {timeframe!r}. "
@@ -450,7 +413,8 @@ def agreger_tick(
         index=df_tick.index,
     )
 
-    agg = df_work.resample(rule, label="right", closed="left").agg(
+    agg = df_work.resample(rule, label="right", closed="left",
+                                origin=grid_origin(df_work.index, timeframe)).agg(
         open=("prix", "first"),
         high=("prix", "max"),
         low=("prix", "min"),
@@ -475,6 +439,8 @@ def agreger_tick(
 
     agg["tick_count"] = agg["tick_count"].astype("int64")
     agg.index.name = "timestamp"
+    agg.attrs.update(timeframe=timeframe, timestamp_convention="close",
+                     calendar="continuous_utc_v1", price_side=prix)
     return agg
 
 
@@ -505,58 +471,55 @@ def infer_asset_from_url(url: str) -> str:
     return stem
 
 
-def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
-    """
-    Resample un DataFrame OHLCV vers le timeframe cible.
+def resample(
+    df: pd.DataFrame, timeframe: str, *, source_timeframe: str | None = None,
+    expected_index: pd.DatetimeIndex | None = None,
+) -> pd.DataFrame:
+    """Agrégation de clôtures UTC ; préserve partialité et couverture source.
 
-    Convention : label='right', closed='right'. Les barres source sont
-    étiquetées par leur fin : la barre étiquetée T regroupe les barres
-    source étiquetées (T - période, T], soit les ticks [T - période, T)
-    comme dans `agreger_tick`.
-
-    Les colonnes annexes (`bid_volume`, `ask_volume`, `spread_*`,
-    `ask_close`, `tick_count`) sont également agrégées si présentes,
-    avec les règles définies dans `COLONNES_ANNEXES_AGG`.
-
-    La colonne `is_partial` marque la dernière barre (potentiellement
-    incomplète) et toute barre dont la fin dépasse la dernière
-    observation source.
+    Sans calendrier explicite, les barres sont attendues en continu UTC.
+    `expected_index` énumère les clôtures source attendues dans les séances.
+    Une conversion vers une fréquence plus fine ou non divisible est refusée.
     """
     if timeframe not in TIMEFRAME_RULES:
-        raise ValueError(
-            f"Timeframe inconnu : {timeframe!r}. "
-            f"Valides : {sorted(TIMEFRAME_RULES)}."
-        )
-
-    rule = TIMEFRAME_RULES[timeframe]
-
-    # Construire le dict d'agrégation : OHLCV + annexes présentes.
+        raise ValueError(f"Timeframe inconnu : {timeframe!r}.")
+    validate_ohlcv(df)
+    if df.attrs.get("timestamp_convention", "close") != "close":
+        raise ValueError("Convertir explicitement les barres d'ouverture en clôtures.")
+    source_tf = resolve_timeframe(df, source_timeframe)
+    source_step = TIMEFRAME_SECONDS[source_tf]
+    target_step = TIMEFRAME_SECONDS[timeframe]
+    if target_step < source_step or target_step % source_step:
+        raise ValueError("Conversion impossible : fréquence cible plus fine ou non divisible.")
+    work = df.copy()
+    work["is_partial"] = ~validity_mask(df)
+    kwargs = dict(rule=TIMEFRAME_RULES[timeframe], label="right", closed="right",
+                  origin=grid_origin(df.index, timeframe))
     agg_dict = dict(OHLCV_AGG)
-    for col, regle in COLONNES_ANNEXES_AGG.items():
-        if col in df.columns:
-            agg_dict[col] = regle
-
-    resampled = df.resample(
-        rule, label="right", closed="right"
-    ).agg(agg_dict)
-
-    last_src_ts = df.index.max()
-    resampled["is_partial"] = False
-    if len(resampled) > 0:
-        resampled.iloc[-1, resampled.columns.get_loc("is_partial")] = True
-        mask_oob = resampled.index > last_src_ts
-        resampled.loc[mask_oob, "is_partial"] = True
-
-    resampled = resampled.dropna(subset=["open", "high", "low", "close"])
-
-    # Forcer tick_count en int64 si présent (somme de booléens/ints).
-    if "tick_count" in resampled.columns:
-        resampled["tick_count"] = resampled["tick_count"].astype("int64")
-
-    if "price_side" in df.attrs:
-        resampled.attrs["price_side"] = df.attrs["price_side"]
-
-    return resampled
+    agg_dict.update({c: rule for c, rule in COLONNES_ANNEXES_AGG.items() if c in df})
+    agg_dict["is_partial"] = "max"
+    result = work.resample(**kwargs).agg(agg_dict)
+    actual = pd.Series(1, index=df.index, dtype="int64").resample(**kwargs).sum()
+    if expected_index is None:
+        expected = pd.Series(target_step // source_step, index=result.index)
+    else:
+        grid = expected_grid(df.index, source_tf, expected_index)
+        expected = pd.Series(1, index=grid, dtype="int64").resample(**kwargs).sum()
+        expected = expected.reindex(result.index, fill_value=0)
+    result["source_count"] = actual
+    result["expected_count"] = expected
+    result["coverage"] = actual.div(expected.where(expected > 0))
+    # Composition : une barre source déjà incomplète ne devient pas complète.
+    result["is_partial"] = result["is_partial"].fillna(True).astype(bool) | actual.ne(expected)
+    result = result.dropna(subset=["open", "high", "low", "close"])
+    if "tick_count" in result:
+        result["tick_count"] = result["tick_count"].astype("int64")
+    result.attrs = dict(df.attrs)
+    result.attrs.update(timeframe=timeframe, timestamp_convention="close",
+                        calendar=df.attrs.get("calendar", "continuous_utc_v1"))
+    if expected_index is not None and result.attrs["calendar"] == "continuous_utc_v1":
+        result.attrs["calendar"] = "explicit_schedule"
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +530,9 @@ def load_parquet(
     asset: str | None = None,
     prix: str = "bid",
     batch_size: int | None = None,
+    *, timeframe: str | None = None,
+    timestamp_convention: str | None = None,
+    source_timezone: str = "UTC",
 ) -> tuple[pd.DataFrame, str]:
     """
     Charge un parquet OHLCV ou tick. Détecte automatiquement le format.
@@ -612,10 +578,7 @@ def load_parquet(
             )
         column_map = dict(zip(normalized, original_columns))
 
-        est_tick = (
-            any(c in column_map for c in _COLONNES_TICK[:2])  # bid ou ask
-            and any(c in column_map for c in TICK_TIMESTAMP_COLUMNS)
-        )
+        est_tick = any(c in column_map for c in _COLONNES_TICK[:2])
 
         if est_tick:
             source_type = "ticks"
@@ -649,22 +612,49 @@ def load_parquet(
                     "colonne timestamp/datetime/date/time."
                 )
 
+        df.index = pd.DatetimeIndex(pd.to_datetime(df.index, errors="raise"))
+        if df.index.tz is None:
+            df.index = df.index.tz_localize(source_timezone)
         df = _ensure_utc_index(df)
+        convention = timestamp_convention or df.attrs.get("timestamp_convention", "close")
+        if convention not in ("open", "close"):
+            raise ValueError("timestamp_convention doit être open ou close.")
+        if convention == "open":
+            tf = timeframe or df.attrs.get("timeframe")
+            if tf not in TIMEFRAME_SECONDS:
+                raise ValueError("Déclarer le timeframe pour convertir les ouvertures.")
+            df.index = df.index + pd.Timedelta(seconds=TIMEFRAME_SECONDS[tf])
+        df.attrs["original_timestamp_convention"] = convention
+        df.attrs["timestamp_convention"] = "close"
+        df.attrs["source_timezone"] = source_timezone
+        if timeframe is not None:
+            if df.attrs.get("timeframe") not in (None, timeframe):
+                raise ValueError("Timeframe source incompatible avec les métadonnées.")
+            df.attrs["timeframe"] = timeframe
         if source_rows is None:
             source_rows = len(df)
         df = df.sort_index(kind="stable")
         validate_ohlcv(df)
 
+    if source_type == "ticks" and timeframe not in (None, "M1"):
+        raise ValueError("Le chargement tick produit M1 ; timeframe source incompatible.")
+    if source_type == "ticks" and (timestamp_convention is not None or source_timezone != "UTC"):
+        raise ValueError("Les options de convention/fuseau source concernent les barres, pas les ticks.")
     df.attrs["source_type"] = source_type
     df.attrs["source_rows"] = source_rows
-    df.attrs["price_side"] = prix if source_type == "ticks" else None
+    df.attrs["price_side"] = prix if source_type == "ticks" else df.attrs.get("price_side")
 
     if asset is None:
-        inferred = infer_asset_from_url(url)
+        inferred = df.attrs.get("asset") or infer_asset_from_url(url)
         if not inferred:
             raise ValueError(
                 "Impossible d'inférer l'actif : fournir --asset."
             )
         asset = inferred
 
+    if df.attrs.get("asset") not in (None, asset):
+        raise ValueError("Actif déclaré incompatible avec les métadonnées source.")
+    df.attrs["asset"] = asset
+    df.attrs.setdefault("source", str(url))
+    df.attrs.setdefault("calendar", "continuous_utc_v1")
     return df, asset

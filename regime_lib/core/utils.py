@@ -13,20 +13,7 @@ import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
 
-# Grille attendue (secondes) par timeframe.
-# Servait de repli quand `is_partial` n'est pas fourni dans les données
-# d'entrée : une barre dont le timestamp n'est pas un multiple entier de
-# `TIMEFRAME_SECONDS[tf]` depuis l'epoch UTC est considérée tronquée.
-TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60,
-    "M5": 300,
-    "M15": 900,
-    "M30": 1800,
-    "H1": 3600,
-    "H4": 14400,
-    "D1": 86400,
-    "W1": 604800,
-}
+from regime_lib.core.temporal import TIMEFRAME_SECONDS, unaligned_mask
 
 
 def true_range(
@@ -57,32 +44,6 @@ def direction(close: np.ndarray, n: int) -> np.ndarray:
     if n < len(close):
         out[n:] = np.sign(close[n:] - close[:-n])
     return out
-
-
-def unaligned_mask(
-    index: pd.DatetimeIndex, timeframe: str | None
-) -> np.ndarray:
-    """
-    Masque numpy : True si le timestamp n'est pas aligné sur la grille
-    du timeframe (multiple du pas en secondes depuis l'epoch UTC).
-
-    Sert de repli quand `is_partial` n'est pas fourni : une barre hors
-    grille est très probablement une barre tronquée.
-
-    La résolution native du DatetimeIndex peut être 's', 'ms', 'us' ou
-    'ns' selon la façon dont il a été construit. On ne suppose PAS de
-    résolution fixe : la conversion est effectuée par une soustraction
-    de Timedelta, indépendante de la résolution interne.
-    """
-    step = TIMEFRAME_SECONDS.get(timeframe or "")
-    if step is None or len(index) == 0:
-        return np.zeros(len(index), dtype=bool)
-    epoch = pd.Timestamp("1970-01-01", tz="UTC") if index.tz is not None \
-        else pd.Timestamp("1970-01-01")
-    ts_s = np.asarray(
-        (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-    )
-    return (ts_s % step) != 0
 
 
 def detect_fractals(

@@ -13,7 +13,8 @@ def test_study_uses_provided_timeframe_ohlcv(monkeypatch):
         "2026-01-01", periods=4, freq="5min", tz="UTC", name="timestamp"
     )
     ohlcv = pd.DataFrame(
-        {"close": [1.0, 2.0, 4.0, 8.0]},
+        {**{c: [1.0, 2.0, 4.0, 8.0] for c in ("open", "high", "low", "close")},
+         "volume": [1.0] * 4},
         index=index,
     )
     study = Study(

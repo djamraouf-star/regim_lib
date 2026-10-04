@@ -24,12 +24,17 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from regime_lib.utils.validation import validate_alignment, validate_ohlcv, validity_mask
+from regime_lib.core.temporal import resolve_timeframe, expected_grid
 
 
 def caracteriser_segments(
     df: pd.DataFrame,
     segment_id: pd.Series,
     atr_fenetre: int = 14,
+    *,
+    timeframe: str | None = None,
+    expected_index: pd.DatetimeIndex | None = None,
 ) -> pd.DataFrame:
     """
     Produit un DataFrame de features par segment.
@@ -53,11 +58,24 @@ def caracteriser_segments(
     """
     if "close" not in df.columns:
         raise ValueError("La colonne 'close' est requise.")
-    if len(df) != len(segment_id):
-        raise ValueError(
-            f"df et segment_id doivent avoir la même longueur "
-            f"({len(df)} vs {len(segment_id)})."
-        )
+    validate_ohlcv(df)
+    validate_alignment(df.index, segment_id.index)
+    if segment_id.isna().any():
+        raise ValueError("Identifiants de segment manquants.")
+    columns = ["segment_id", "debut", "fin", "n_barres", "direction", "pente",
+               "amplitude", "efficience", "volatilite", "pente_atr", "is_valid"]
+    if df.empty:
+        return pd.DataFrame(columns=columns).set_index("segment_id")
+    if atr_fenetre < 1:
+        raise ValueError("atr_fenetre doit être positif.")
+    # Un identifiant ne doit jamais recoller des épisodes disjoints.
+    starts = segment_id.ne(segment_id.shift())
+    if segment_id[starts].duplicated().any():
+        raise ValueError("Identifiant de segment réutilisé sur des épisodes disjoints.")
+    tf = resolve_timeframe(df, timeframe)
+    grid = expected_grid(df.index, tf, expected_index)
+    positions = grid.get_indexer(df.index)
+    gap_before = pd.Series(np.r_[False, np.diff(positions) != 1], index=df.index)
 
     # Aligner segment_id sur l'index de df
     seg = pd.Series(
@@ -115,6 +133,10 @@ def caracteriser_segments(
             "efficience": float(np.clip(efficience, 0.0, 1.0)),
             "volatilite": volatilite,
             "pente_atr": float(pente_atr),
+            "is_valid": bool(validity_mask(g).all() and not gap_before.loc[g.index].iloc[1:].any()),
         })
 
-    return pd.DataFrame(rows).set_index("segment_id")
+    result = pd.DataFrame(rows).set_index("segment_id")
+    metrics = ["direction", "pente", "amplitude", "efficience", "volatilite", "pente_atr"]
+    result.loc[~result["is_valid"], metrics] = np.nan
+    return result

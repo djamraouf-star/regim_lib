@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Final
 
 import pandas as pd
+from regime_lib.utils.validation import validate_time_index
 
 REQUIRED_COLUMNS: Final[list[str]] = [
     "timestamp",
@@ -89,6 +90,10 @@ def to_uniform(
         raise ValueError("Colonne 'regime' manquante.")
 
     out = df.copy()
+    validate_time_index(out.index)
+    for field in ("source", "price_side", "adjustment", "calendar", "timestamp_convention"):
+        if out.attrs.get(field) is not None:
+            out[field] = out.attrs[field]
     out.index.name = "timestamp"
     out = out.reset_index()
 

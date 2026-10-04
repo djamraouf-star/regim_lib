@@ -38,6 +38,8 @@ Causalité et anti-lookahead
 
 from __future__ import annotations
 
+from regime_lib.utils.validation import validated_detector
+
 import numpy as np
 import pandas as pd
 
@@ -156,6 +158,7 @@ class ERKaufmanDetector(RegimeDetector):
         er[n:] = np.clip(ratio, 0.0, 1.0)
         return er
 
+    @validated_detector
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
         out.columns = [

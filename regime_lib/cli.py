@@ -85,6 +85,7 @@ from regime_lib.core.data_loader import (
 from regime_lib.core.output import export_long, export_meta, to_uniform
 from regime_lib.core.registry import METHOD_REGISTRY
 from regime_lib.utils.repro import hash_params
+from regime_lib.utils.validation import validate_alignment
 
 # Effet de bord volontaire : importe les méthodes concrètes pour déclencher
 # les décorateurs @register_method et peupler METHOD_REGISTRY.
@@ -201,6 +202,12 @@ def build_parser() -> argparse.ArgumentParser:
     # manuellement dans run().
     parser.add_argument("--url", default=None,
                         help="URL locale ou distante du parquet OHLCV.")
+    parser.add_argument("--source-timeframe", choices=sorted(TIMEFRAME_RULES), default=None,
+                        help="Fréquence des barres source ; requise si la grille est irrégulière.")
+    parser.add_argument("--timestamp-convention", choices=["open", "close"], default=None,
+                        help="Convention des barres source (métadonnées, sinon close).")
+    parser.add_argument("--source-timezone", default="UTC",
+                        help="Fuseau des timestamps de barres sans fuseau (défaut UTC).")
     parser.add_argument(
         "--timeframe",
         default=None,
@@ -333,13 +340,15 @@ def _run_one_timeframe(
             file=sys.stderr,
         )
         out = detector.fit_predict(df_tf)
+        validate_alignment(df_tf.index, out.index)
 
         # Propagation des colonnes ctx_* sur `out`.
         # `out` et `df_ctx` partagent le même DatetimeIndex (issu de
         # df_tf), dans le même ordre. L'assignation directe est correcte.
         if df_ctx is not None:
             for col in cols_ctx:
-                out[col] = df_ctx[col].values
+                validate_alignment(out.index, df_ctx.index)
+                out[col] = df_ctx[col]
 
         uniform = to_uniform(
             out,
@@ -398,7 +407,12 @@ def run(args: argparse.Namespace) -> int:
 
     # --- Chargement des données -----------------------------------------
     print(f"[run] Chargement de {args.url}", file=sys.stderr)
-    df_raw, asset = load_parquet(args.url, asset=args.asset)
+    df_raw, asset = load_parquet(
+        args.url, asset=args.asset,
+        timeframe=getattr(args, "source_timeframe", None),
+        timestamp_convention=getattr(args, "timestamp_convention", None),
+        source_timezone=getattr(args, "source_timezone", "UTC"),
+    )
     source_type = df_raw.attrs.get("source_type", "barres")
     source_rows = int(df_raw.attrs.get("source_rows", len(df_raw)))
     if source_type == "ticks":

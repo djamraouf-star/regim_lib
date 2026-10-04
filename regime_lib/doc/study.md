@@ -117,6 +117,10 @@ groupes auraient mécaniquement 50 % de succès chacun).
 
 ## 7. Utilisation
 
+Depuis l'étape 2, les entrées doivent respecter les contrôles d'identité,
+de fréquence et de support décrits dans le
+[guide d'alignement et de validité](./alignement_validite.md).
+
 ### 7.1 Cas minimal
 
 ```python
@@ -153,6 +157,8 @@ etude.save("results/study/")
 # Produit :
 #   study_results.parquet         (métriques principales)
 #   study_tests_modalite.parquet  (tests par modalité)
+#   study_coverage.parquet        (couverture propre et commune)
+#   study_common_support.parquet  (masque par timestamp et cible)
 #   study_report.md               (rapport lisible)
 
 etude = Study(

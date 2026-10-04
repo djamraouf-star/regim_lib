@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from regime_lib.utils.validation import validate_alignment
 
 
 def purete_par_segment(
@@ -54,15 +55,11 @@ def purete_par_segment(
         - n_regimes : nombre de régimes distincts dans le segment
         - regimes : liste des régimes présents (utile pour debug)
     """
-    if len(regimes) != len(segment_id):
-        raise ValueError(
-            "regimes et segment_id doivent avoir la même longueur."
-        )
-
-    tmp = pd.DataFrame({
-        "regime": regimes.values,
-        "segment_id": segment_id.values,
-    })
+    validate_alignment(regimes.index, segment_id.index)
+    if segment_id.isna().any():
+        raise ValueError("Identifiants de segment manquants.")
+    tmp = pd.DataFrame({"regime": regimes, "segment_id": segment_id})
+    tmp = tmp[tmp["regime"].notna() & tmp["regime"].ne("INCONNU")]
 
     rows: list[dict] = []
     for sid, g in tmp.groupby("segment_id", sort=True):
@@ -77,7 +74,8 @@ def purete_par_segment(
             "regimes": counts.to_dict(),
         })
 
-    return pd.DataFrame(rows).set_index("segment_id")
+    return pd.DataFrame(rows, columns=["segment_id", "n_barres", "regime_dominant",
+                                       "purete", "n_regimes", "regimes"]).set_index("segment_id")
 
 
 def purete_globale_ponderee(
@@ -87,7 +85,7 @@ def purete_globale_ponderee(
     Pureté moyenne pondérée par la taille des segments.
     """
     if len(purete_df) == 0:
-        return 0.0
+        return float("nan")
     poids = purete_df["n_barres"]
     return float(
         (purete_df["purete"] * poids).sum() / poids.sum()
@@ -99,7 +97,7 @@ def nombre_moyen_regimes_par_segment(
 ) -> float:
     """Nombre moyen de régimes distincts par segment."""
     if len(purete_df) == 0:
-        return 0.0
+        return float("nan")
     return float(purete_df["n_regimes"].mean())
 
 
@@ -127,15 +125,24 @@ def comparer_methodes(
         - purete_max : pureté du segment le plus pur
         - n_segments_purs : nombre de segments à pureté = 1.0
     """
+    shared = pd.Series(True, index=segment_id.index)
+    for regimes in methodes.values():
+        validate_alignment(regimes.index, segment_id.index)
+        shared &= regimes.notna() & regimes.ne("INCONNU")
     rows: list[dict] = []
     for name, regimes in methodes.items():
-        p = purete_par_segment(regimes, segment_id)
+        own = regimes.notna() & regimes.ne("INCONNU")
+        p = purete_par_segment(regimes.where(shared), segment_id)
         rows.append({
             "methode": name,
+            "n_propre": int(own.sum()),
+            "n_commun": int(shared.sum()),
             "purete_ponderee": purete_globale_ponderee(p),
             "n_regimes_moy": nombre_moyen_regimes_par_segment(p),
-            "purete_min": float(p["purete"].min()) if len(p) else 0.0,
-            "purete_max": float(p["purete"].max()) if len(p) else 0.0,
+            "purete_min": float(p["purete"].min()) if len(p) else float("nan"),
+            "purete_max": float(p["purete"].max()) if len(p) else float("nan"),
             "n_segments_purs": int((p["purete"] == 1.0).sum()),
         })
-    return pd.DataFrame(rows).set_index("methode")
+    return pd.DataFrame(rows, columns=["methode", "n_propre", "n_commun", "purete_ponderee",
+                                       "n_regimes_moy", "purete_min", "purete_max",
+                                       "n_segments_purs"]).set_index("methode")

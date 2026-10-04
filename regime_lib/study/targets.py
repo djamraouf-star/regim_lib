@@ -30,6 +30,8 @@ import re
 
 import numpy as np
 import pandas as pd
+from regime_lib.core.temporal import resolve_timeframe, expected_grid
+from regime_lib.utils.validation import validate_time_index, validity_mask
 
 
 _PATTERN = re.compile(r"^([a-z]+)_fwd_(\d+)$")
@@ -65,7 +67,10 @@ def parser_cible(nom: str) -> tuple[str, int]:
     return famille, k
 
 
-def calculer_cible(ohlcv: pd.DataFrame, nom: str) -> pd.Series:
+def calculer_cible(
+    ohlcv: pd.DataFrame, nom: str, *, timeframe: str | None = None,
+    expected_index: pd.DatetimeIndex | None = None,
+) -> pd.Series:
     """
     Calcule une cible à partir d'un DataFrame OHLCV.
 
@@ -87,7 +92,15 @@ def calculer_cible(ohlcv: pd.DataFrame, nom: str) -> pd.Series:
     if "close" not in ohlcv.columns:
         raise ValueError("Le DataFrame doit contenir une colonne 'close'.")
 
-    close = ohlcv["close"]
+    validate_time_index(ohlcv.index)
+    original_index = ohlcv.index
+    values = ohlcv["close"].to_numpy(dtype=float)
+    if not np.isfinite(values).all() or (values <= 0).any():
+        raise ValueError("Les clôtures doivent être finies et strictement positives.")
+    tf = resolve_timeframe(ohlcv, timeframe)
+    grid = expected_grid(original_index, tf, expected_index)
+    valid = validity_mask(ohlcv).reindex(grid, fill_value=False)
+    close = ohlcv["close"].reindex(grid)
 
     if famille == "ret":
         cible = np.log(close.shift(-k) / close)
@@ -119,6 +132,9 @@ def calculer_cible(ohlcv: pd.DataFrame, nom: str) -> pd.Series:
     else:  # pragma: no cover — famille validée par parser_cible
         raise ValueError(f"Famille non implémentée : {famille}")
 
+    # Toute la trajectoire doit être observable, même pour un rendement terminal.
+    complete = valid.astype(int).rolling(k + 1, min_periods=k + 1).sum().shift(-k).eq(k + 1)
+    cible = cible.where(complete).reindex(original_index)
     cible.name = nom
     return cible
 

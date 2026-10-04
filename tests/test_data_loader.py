@@ -195,10 +195,11 @@ def test_resample_preserves_ohlcv_logic(ohlcv_h1):
     assert row["volume"] == src["volume"].sum()
 
 
-def test_resample_marks_last_bar_partial(ohlcv_h1):
+def test_resample_marks_incomplete_boundary_bars(ohlcv_h1):
     df = resample(ohlcv_h1, "H4")
     assert df["is_partial"].iloc[-1] is True or df["is_partial"].iloc[-1] == True
-    assert not df["is_partial"].iloc[:-1].any()
+    assert df["is_partial"].iloc[0]
+    assert not df["is_partial"].iloc[1:-1].any()
 
 
 def test_resample_rejects_unknown_timeframe(ohlcv_h1):

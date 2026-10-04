@@ -41,6 +41,8 @@ Disponible uniquement sur données tick.
 
 from __future__ import annotations
 
+from regime_lib.utils.validation import validated_detector
+
 import numpy as np
 import pandas as pd
 
@@ -110,6 +112,7 @@ class OrderFlowImbalanceDetector(RegimeDetector):
         """Delegue vers regime_lib.core.utils.unaligned_mask."""
         return unaligned_mask(index, timeframe)
 
+    @validated_detector
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
         out.columns = [c.lower() if isinstance(c, str) else c

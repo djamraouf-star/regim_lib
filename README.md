@@ -10,11 +10,16 @@ ultérieure** (SPDX : `GPL-3.0-or-later`). Voir [LICENSE](./LICENSE).
 
 ## Usage et limites
 
-`regime_lib` est un outil de recherche exploratoire : il aide à analyser les
-régimes de marché et à explorer des hypothèses de stratégie. Il n'est pas conçu
-ni validé pour un usage en production de trading, la génération d'ordres ou
-l'exécution automatisée. Ses résultats ne constituent pas des signaux de
-trading validés.
+`regime_lib` caractérise les mouvements des indices financiers et compare les
+familles d'indicateurs en projetant leurs représentations dans l'espace du prix.
+Les cinq dimensions de comparaison sont l'amplitude, la régularité du trajet,
+la durée, la fréquence d'apparition et l'excursion opposée. L'API ne constitue
+ni une stratégie de trading ni un moteur de backtest.
+
+Le [contrat commun de projection et de mesure v1.0.0](./regime_lib/doc/protocole_projection_mesure.md)
+fixe la direction du développement, les conventions et les exemples numériques
+de référence. Il décrit les garanties à implémenter, pas une conformité déjà
+acquise du code actuel.
 
 ## Fonctionnalités
 
@@ -61,8 +66,11 @@ Les barres tick incluent aussi `spread_mean`, `spread_max`, `spread_close`,
 `ask_close`, `tick_count` et `is_partial`. Une barre M1 étiquetée `T` couvre
 `[T - 1 min, T)` : un tick exactement sur la frontière `T` appartient à la
 barre suivante. La première et la dernière barre d'une agrégation tick sont
-marquées partielles. Le resampling vers un timeframe supérieur agrège les
-colonnes OHLCV et marque sa dernière barre partielle.
+marquées partielles. Le resampling conserve ces marqueurs et marque les agrégats
+dont le nombre de barres source est insuffisant, y compris au début de la série.
+Il publie `source_count`, `expected_count` et leur rapport `coverage` ; un agrégat
+peut avoir une couverture de 100 % tout en contenant une barre source partielle.
+Une dernière barre complète n'est pas marquée partielle artificiellement.
 
 Les ticks sont agrégés en barres M1 avant le resampling vers le ou les
 timeframes demandés. Le chargement d'un Parquet local peut être traité par
@@ -71,6 +79,9 @@ n'est pas fourni, le symbole est inféré du nom de fichier.
 
 Timeframes pris en charge : `M1`, `M5`, `M15`, `M30`, `H1`, `H4`, `D1`,
 `W1`.
+
+Les conventions d'alignement, les nouveaux paramètres de sélection et les
+exports de couverture sont décrits dans le [guide de l'étape 2](./regime_lib/doc/alignement_validite.md).
 
 ## Utilisation rapide
 
