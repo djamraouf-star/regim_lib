@@ -2,13 +2,93 @@
 
 **Date :** 4 octobre 2026. **Révision auditée :** [1f73f32](https://github.com/djamraouf-star/regim_lib/commit/1f73f32ba2b6888d634d25b7f0ab373d14c97c08).
 
+**Suivi mis à jour :** 4 octobre 2026, après les étapes 1 et 2, sur la révision
+[67c47ad](https://github.com/djamraouf-star/regim_lib/commit/67c47ad).
+
 ## Portée et conclusion
 
-Audit statique du code, de l'architecture et des tests versionnés. La suite de tests n'a pas été exécutée et les données de marché ne sont pas incluses dans le dépôt. Aucune performance empirique n'est établie. Les constats concernent la révision ci-dessus et doivent être revérifiés après correction.
+L'audit initial était statique et concernait la révision 1f73f32 ; sa suite de
+tests n'avait pas été exécutée. Les tableaux de constats ci-dessous conservent
+cet état initial pour la traçabilité. **Le tableau de suivi fait foi pour leur
+statut après correction.** Cette mise à jour ne constitue pas un nouvel audit
+exhaustif des méthodes.
 
-L'objectif est de comparer les détecteurs et d'identifier les mouvements et horizons offrant le meilleur potentiel brut de gain. L'architecture constitue une base exploitable, mais les classements ne sont pas encore fiables : fuite future dans VPIN, identité temporelle insuffisamment contrôlée et métriques inadaptées aux catégories.
+L'objectif est de comparer les familles d'indicateurs en projetant leurs
+représentations dans l'espace du prix, selon cinq dimensions : **amplitude,
+régularité du trajet, durée, fréquence d'apparition et excursion opposée**.
+L'API n'est ni une stratégie de trading ni un moteur de backtest. Les labels
+natifs ne constituent pas une échelle commune de comparaison ; PELT reste une
+référence descriptive optionnelle.
 
-Ce document synthétise l'audit ; il ne constitue pas une correction du code.
+Les étapes 1 et 2 ont établi le contrat commun puis renforcé les contrôles de
+série, l'alignement temporel et la validité du support de comparaison. Les
+classements ne sont pas encore fiables : la fuite future VPIN (C1), les métriques
+ordinales sur catégories (C4) et l'inférence statistique (C5) restent à corriger.
+Les données de marché ne sont pas incluses dans le dépôt et aucune performance
+empirique ni supériorité d'une méthode n'est établie.
+
+## Suivi des corrections — étapes 1 et 2
+
+**Étape 1 livrée :** [contrat v1.0.0](./regime_lib/doc/protocole_projection_mesure.md),
+avec unités de projection, cinq mesures, conventions temporelles et exemples
+numériques. Une convention documentée n'est pas considérée comme implémentée.
+
+**Étape 2 livrée :** [guide d'alignement et de validité](./regime_lib/doc/alignement_validite.md),
+contrôles et propagation du support jusqu'aux projections et études.
+
+| Réf. | Statut après étape 2 | Correction réalisée / limite restante |
+|---|---|---|
+| C2 | Corrigé pour les horizons en barres | L'étude vérifie l'actif et le timeframe, agrège les prix source plus fins avant de calculer les cibles et refuse les timestamps de régimes absents des prix. Les horizons en durée explicite restent à implémenter. |
+| C3 | Corrigé pour la sélection d'une série/configuration | Sélection actif/timeframe et `params_hash` par méthode ; refus des doublons et mélanges. Comparer simultanément deux configurations d'une même méthode dans un pivot reste hors de l'interface actuelle. |
+| I3 | Corrigé pour les marqueurs disponibles | Partialité conservée au resampling, dans les appels directs aux détecteurs et à l'export ; fenêtres invalides exclues des cibles. `coverage` mesure la présence des barres à l'étage courant et se lit avec `is_partial`, qui conserve l'invalidité source. |
+| I4 | Partiellement corrigé | Conventions source déclarables, refus des conversions impossibles, grille UTC centralisée et W1 ancré au lundi pour agrégation et masques. Les séances peuvent être fournies par `expected_index` ; pas de génération automatique de bornes locales/DST. Les anciennes entrées sans métadonnées gardent les défauts documentés close/UTC. |
+| I5 | Corrigé pour les entrées des détecteurs et chargeurs | Contrôles OHLC numériques, finis, positifs et cohérents ; index UTC unique ; volumes disponibles finis et non négatifs. Validation partagée par tous les détecteurs, y compris les appels directs. |
+| I6 | Corrigé | Les quatre alias timestamp/datetime/date/time utilisent la même préparation tick en lecture complète et par lots. |
+| I14 | Corrigé à l'entrée publique | Les NaN OHLC sont rejetés avant le calcul de Kaufman. Le cumul interne n'a pas été transformé en calcul capable de reprendre après un NaN. |
+| I18 | Corrigé pour le support valide | INCONNU, absences, chauffe déclarée et partialité sont exclus ; couverture propre et masque commun par cible exportés. Les compteurs INCONNU et chauffe restent distincts, tous les détecteurs ne déclarant pas une chauffe séparée. |
+| I21 | Corrigé pour l'alignement et les cas invalides | Index stricts, segments manquants/dupliqués ou disjoints refusés, sorties vides prises en charge ; segments traversant des trous attendus ou des barres invalides signalés. |
+| I25 | Partiellement corrigé | 37 tests ciblés ajoutés sur identité, calendrier, projection, validité et support commun. Les tests spécifiques de causalité VPIN/pivots/HMM et les références numériques des nouvelles mesures restent à ajouter. |
+| C1, I1, I9, I10 | À réaliser — étape 3 | Le contrat décrit les modes rétrospectif et disponible à date. Clôture des buckets VPIN, métadonnées de disponibilité, événements de pivots et filtrage avant HMM ne sont pas encore implémentés. |
+| C4, I7, I8, I15–I17, I20 | À réaliser — étape 4 | Les mesures communes, la sémantique des scores et la suppression des classements arbitraires restent à implémenter. L'accord utilise désormais un support commun, mais une pureté parfaite d'un détecteur constant reste possible. |
+| C5, I2, I19 | À réaliser — étape 5 | Dépendance temporelle, comparaisons multiples, purge et exports statistiques complets restent ouverts. |
+| I22–I24, I26 | À réaliser — étape 6 | Paramètres effectifs, cascade de configuration, collecte complète des tests et packaging restent ouverts. |
+| I11–I13, M1–M4 | Non traités dans ces livraisons | Fidélité des indicateurs et maintenance à traiter séparément selon le périmètre retenu. |
+
+Les nouveaux exports transportent les métadonnées de source disponibles. Un
+ancien parquet qui ne déclare pas sa source, son côté de prix, ses ajustements
+ou son calendrier ne permet pas de certifier ces dimensions par rétro-inférence.
+Le hash utilisé pour sélectionner une configuration reste soumis à I22.
+
+### Validation effectivement exécutée
+
+Sur la révision 67c47ad, avec Python 3.14 et un environnement local contenant
+les dépendances du projet ainsi que SciPy et ruptures installés explicitement :
+
+```bash
+.venv/bin/python -m pytest --ignore=tests/test_screening_eurusd.py -o addopts='' -q
+```
+
+**Résultat : 383 tests réussis, dont 37 nouveaux tests ciblés ; un avertissement
+joblib sur la détection des cœurs physiques.** Compilation Python, liens des
+nouveaux documents et `git diff --check` vérifiés.
+
+La collecte du [test de screening](./tests/test_screening_eurusd.py) a également
+été tentée : elle échoue sur le module absent
+`analyses.EURUSD.scripts.screening_eurusd`. **I24 reste ouvert ; il ne s'agit donc
+pas d'une validation de la suite entière.** L'installation explicite de SciPy
+et ruptures pour les tests ne résout pas I26 et ne valide pas une wheel autonome.
+
+Les [tests du contrat](./tests/test_comparison_contract.py) vérifient notamment
+le passage de prix M5 à des cibles H1, le rejet d'index décalés de même longueur,
+la propagation des barres partielles et les supports communs vides. Ils ne
+prouvent ni la causalité des méthodes encore concernées par l'étape 3, ni la
+validité des classements statistiques encore concernés par les étapes 4 et 5.
+
+## Constats initiaux — révision 1f73f32
+
+Les problèmes et recommandations ci-dessous sont conservés à titre historique.
+Pour le périmètre et la terminologie de développement actuels, utiliser le
+contrat et le plan de livraison en fin de document.
 
 ## Architecture et garanties existantes
 
@@ -87,11 +167,35 @@ Shannon décrit un histogramme de rendements, pas leur ordre temporel. PCA utili
 
 Les excursions futures maximales décrivent une opportunité rétrospective ; elles ne constituent pas à elles seules un gain réalisable par une règle d'entrée/sortie.
 
-## Plan de correction priorisé
+## Plan de livraison actualisé
 
-1. **P0 — Données et causalité :** corriger VPIN, imposer les clés de série et les conventions temporelles, propager validité/partialité. Critère : aucune sortie causale passée ne change lorsqu'on ajoute du futur.
-2. **P0 — Évaluation :** supprimer les métriques ordinales arbitraires, restreindre le hit rate, purger selon les cibles et exclure les observations invalides. Critère : renommer les catégories ne change pas les conclusions.
-3. **P1 — Potentiel brut :** définir entrée, unités et horizons ; ajouter rendement terminal, MFE/MAE long/short, quantiles et temps jusqu'aux extrêmes. Comparer des horizons en barres et des durées communes.
-4. **P1 — Validation :** séparer exploration, sélection et confirmation finale ; traiter dépendance temporelle/comparaisons multiples ; exporter tous les folds.
-5. **P1 — Reproductibilité :** réparer l'import absent, hacher paramètres effectifs et données, vérifier installation et ressources embarquées.
-6. **P2 — Méthodes et maintenance :** préciser labels/scores, corriger Wilder/MSS, envisager des variantes causales distinctes pour Price Action/HMM, compléter les tests et nettoyer les duplications.
+1. **Étape 1 — Livrée : contrat commun.** Identité, unités d'observation,
+   conventions, cinq mesures et exemples de référence documentés.
+2. **Étape 2 — Livrée dans les limites ci-dessus : données et support.**
+   Alignement, contrôles OHLCV, partialité, couverture propre et support commun.
+   Les calendriers de séances doivent être fournis explicitement ; les grilles
+   prises en charge sont UTC.
+3. **Étape 3 — Prochaine : disponibilité temporelle (C1, I1, I9, I10).**
+   Publier VPIN à la clôture des buckets ; porter disponibilité et révisions dans
+   les métadonnées ; distinguer pivots observés/confirmés/révisés ; conserver le
+   HMM rétrospectif et ajouter un mode appris sur une période de référence puis
+   filtré en avant. Critère : le futur ne modifie pas les sorties déjà publiées
+   en mode disponible à date, à apprentissage historique inchangé.
+4. **Étape 4 — À réaliser : projection et cinq mesures communes.** Comparer les
+   distributions dans l'espace du prix, expliciter orientation, unités et horizons,
+   supprimer l'effet du codage arbitraire des labels et les conversions implicites
+   en directions. Critère : une projection identique reçoit les mêmes mesures,
+   quel que soit le nom des catégories ou de la méthode.
+5. **Étape 5 — À réaliser : comparaison statistique.** Traiter chevauchements,
+   dépendance temporelle, comparaisons multiples et frontières des périodes ;
+   exporter toutes les périodes/modalités/horizons et leur stabilité. Confirmation
+   indépendante si une sélection est présentée comme stable.
+6. **Étape 6 — À réaliser : reproductibilité.** Enregistrer paramètres effectifs,
+   versions du protocole et du code, empreintes des données et du support ; unifier
+   la configuration ; réparer la collecte et vérifier dépendances/ressources dans
+   une installation autonome.
+
+Les corrections de fidélité des indicateurs I11–I13 restent distinctes du contrat
+commun. Les sujets de maintenance M1–M4 restent secondaires sauf s'ils bloquent
+une livraison. Aucun résultat de ces étapes n'introduit une règle de trading,
+un backtest ou un score global imposé.
