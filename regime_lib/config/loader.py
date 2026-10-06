@@ -3,13 +3,14 @@ Chargement, fusion et hachage des profils.
 
 Le loader est le point d'entrée principal du module config. Il gère :
   - le chargement d'un fichier YAML ;
-  - la fusion profonde avec le profil par défaut ;
+  - la fusion des sections générales et la conservation des couches de méthodes ;
   - la construction d'un `ProfilConfig` validé ;
   - le calcul d'un hash stable pour la reproductibilité.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -28,6 +29,30 @@ from regime_lib.config.schema import (
 
 # Répertoire des profils embarqués.
 _PROFILES_DIR = Path(__file__).parent / "profiles"
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """Refuse les doublons YAML que SafeLoader écraserait silencieusement."""
+
+    def construct_mapping(self, node, deep=False):
+        keys = set()
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise yaml.constructor.ConstructorError(
+                    None, None, "Utiliser les profils plutôt que la fusion YAML <<.",
+                    key_node.start_mark,
+                )
+            key = self.construct_object(key_node, deep=deep)
+            if not isinstance(key, str):
+                raise yaml.constructor.ConstructorError(
+                    None, None, "Les clés YAML doivent être des chaînes.", key_node.start_mark,
+                )
+            if key in keys:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f"Clé YAML dupliquée : {key!r}.", key_node.start_mark,
+                )
+            keys.add(key)
+        return super().construct_mapping(node, deep=deep)
 
 
 # ---------------------------------------------------------------------------
@@ -59,8 +84,11 @@ def _read_yaml(path: Path) -> dict:
     """Lit un fichier YAML et vérifie que la racine est un dict."""
     if not path.exists():
         raise FileNotFoundError(f"Profil introuvable : {path}")
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.load(f, Loader=_UniqueKeyLoader)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"YAML invalide dans {path}: {exc}") from exc
     if data is None:
         raise ValueError(f"Fichier YAML vide : {path}")
     if not isinstance(data, dict):
@@ -123,7 +151,9 @@ def _build_segmentation(raw: dict | None) -> SegmentationConfig:
     )
 
 
-def _build_profil(data: dict, source_path: Path | None = None) -> ProfilConfig:
+def _build_profil(
+    data: dict, source_path: Path | None = None, *, method_defaults: dict | None = None,
+) -> ProfilConfig:
     """Construit un ProfilConfig validé depuis un dict fusionné."""
     return ProfilConfig(
         nom=data.get("nom", "default"),
@@ -134,6 +164,7 @@ def _build_profil(data: dict, source_path: Path | None = None) -> ProfilConfig:
         context=_build_context(data.get("context")),
         segmentation=_build_segmentation(data.get("segmentation")),
         source_path=source_path,
+        method_defaults=method_defaults,
     )
 
 
@@ -144,8 +175,9 @@ def load_profile(nom_ou_chemin: str | Path) -> ProfilConfig:
     """
     Charge un profil par nom ou par chemin.
 
-    Le profil est fusionné avec `default.yaml` (héritage implicite).
-    Si le nom vaut 'default', le fichier default.yaml est chargé seul.
+    Les méthodes conservent séparément défauts et surcharges. Seules les
+    sections générales sont fusionnées. Le nom 'default' désigne le fichier
+    embarqué ; un chemin explicite nommé default.yaml reste un profil utilisateur.
 
     Parameters
     ----------
@@ -165,27 +197,45 @@ def load_profile(nom_ou_chemin: str | Path) -> ProfilConfig:
     >>> profil.context.reference_tz
     'America/New_York'
     """
-    # Résolution du chemin
-    if isinstance(nom_ou_chemin, Path) or str(nom_ou_chemin).endswith(".yaml"):
-        user_path = Path(nom_ou_chemin)
-        nom = user_path.stem
-    else:
-        nom = str(nom_ou_chemin)
-        user_path = _PROFILES_DIR / f"{nom}.yaml"
-
-    # Chargement du profil default (toujours, sauf si c'est lui-même)
     default_path = _PROFILES_DIR / "default.yaml"
-    default_data = _read_yaml(default_path)
-
-    if nom == "default":
-        merged = default_data
-        source_path = default_path
+    if isinstance(nom_ou_chemin, Path) or str(nom_ou_chemin).endswith((".yaml", ".yml")):
+        user_path = Path(nom_ou_chemin)
     else:
-        user_data = _read_yaml(user_path)
-        merged = _deep_merge(default_data, user_data)
-        source_path = user_path
+        user_path = _PROFILES_DIR / f"{nom_ou_chemin}.yaml"
+    default_data = _read_yaml(default_path)
+    is_default = user_path.resolve() == default_path.resolve()
+    user_data = {} if is_default else _read_yaml(user_path)
+    defaults = default_data.get("methodes", {})
+    overrides = user_data.get("methodes", {})
+    # Seules les sections générales conservent leur fusion profonde historique.
+    # Les méthodes gardent deux couches, résolues une seule fois selon le TF.
+    merged = _deep_merge(
+        {k: v for k, v in default_data.items() if k != "methodes"},
+        {k: v for k, v in user_data.items() if k != "methodes"},
+    )
+    merged["methodes"] = deepcopy(overrides)
+    return _build_profil(merged, source_path=user_path, method_defaults=deepcopy(defaults))
 
-    return _build_profil(merged, source_path=source_path)
+
+def _validate_methods(defaults: dict, overrides: dict, source: str) -> None:
+    from regime_lib.core.registry import METHOD_REGISTRY
+    from regime_lib.config.parameters import MethodProfile, TIMEFRAMES, resolve_parameters
+
+    for layer in (defaults, overrides):
+        if not isinstance(layer, dict):
+            raise ValueError(f"{source}: methodes doit être un dictionnaire.")
+        for name in layer:
+            if name not in METHOD_REGISTRY:
+                raise ValueError(f"{source}: methodes.{name}: méthode inconnue.")
+    for name in defaults.keys() | overrides.keys() | METHOD_REGISTRY.keys():
+        schema = METHOD_REGISTRY[name].PARAM_SCHEMA
+        if schema is None:
+            if name in defaults or name in overrides:
+                raise ValueError(f"methodes.{name}: schéma de paramètres absent.")
+            continue
+        profile = MethodProfile(name, defaults.get(name, {}), overrides.get(name, {}), source)
+        for tf in (None, *TIMEFRAMES):
+            resolve_parameters(name, schema, tf, profile)
 
 
 def list_profiles() -> list[str]:
@@ -238,6 +288,7 @@ def profile_hash(profil: ProfilConfig, length: int = 16) -> str:
             ),
         },
         "methodes": profil.methodes,
+        "method_defaults": profil.method_defaults,
         "context": {
             "reference_tz": profil.context.reference_tz,
             "sessions": profil.context.sessions,

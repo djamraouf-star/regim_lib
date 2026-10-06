@@ -41,6 +41,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -136,11 +137,19 @@ class PCAAxisDetector(RegimeDetector):
     }
     requires_lookahead = False
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "fenetre": Parameter(int, minimum=20, per_timeframe=True),
+            "seuil_direction": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "seuil_eigen_ratio": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+        },
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         fenetre: int | None = None,
         seuil_direction: float | None = None,
         seuil_eigen_ratio: float | None = None,
@@ -153,22 +162,6 @@ class PCAAxisDetector(RegimeDetector):
             seuil_direction=seuil_direction,
             seuil_eigen_ratio=seuil_eigen_ratio,
         )
-        self.fenetre = int(self._resolve(
-            "fenetre", fenetre, default=100, per_timeframe=True,
-        ))
-        self.seuil_direction = float(self._resolve(
-            "seuil_direction", seuil_direction, default=0.3
-        ))
-        self.seuil_eigen_ratio = float(self._resolve(
-            "seuil_eigen_ratio", seuil_eigen_ratio, default=0.65
-        ))
-
-        if self.fenetre < 20:
-            raise ValueError("fenetre doit être >= 20.")
-        if not (0.0 < self.seuil_direction < 1.0):
-            raise ValueError("seuil_direction doit être dans (0, 1).")
-        if not (0.0 < self.seuil_eigen_ratio < 1.0):
-            raise ValueError("seuil_eigen_ratio doit être dans (0, 1).")
 
     @staticmethod
     def _unaligned_mask(

@@ -1,6 +1,6 @@
 # Configuration par profils
 
-**Dernière mise à jour** : 2026-10-03
+**Dernière mise à jour** : 2026-10-05
 **Module** : `regime_lib/config/`
 **Source de vérité** : `regime_lib/config/profiles/default.yaml`
 
@@ -19,7 +19,7 @@ regroupe dans un fichier YAML lisible et versionnable.
 ## 2. Structure d'un profil
 
 Un profil est un fichier YAML avec des métadonnées (`nom`, `type`,
-`description`) et trois sections de configuration :
+`description`) et des sections de configuration :
 
 ```yaml
 nom: eurusd                          # identifiant court (obligatoire)
@@ -51,9 +51,12 @@ segmentation:
 - `segmentation` décrit les paramètres du module de segmentation.
 
 Les noms de méthode doivent correspondre exactement aux identifiants
-enregistrés, par exemple `shannon` ou `pca_axis`. Les paramètres de méthode
-sont principalement vérifiés par le constructeur de la méthode au moment de
-son utilisation.
+enregistrés, par exemple `shannon` ou `pca_axis`. Chaque détecteur déclare un `PARAM_SCHEMA` : clés, types stricts, bornes,
+autorisation par timeframe et contraintes entre paramètres. Le chargement
+valide toutes les méthodes et tous les timeframes, même non sélectionnés.
+Les clés inconnues, doublons YAML, booléens utilisés comme entiers et valeurs
+non finies sont rejetés avec un diagnostic. Les signatures Python gardent
+leurs arguments nommés ; elles ne définissent plus de valeurs de secours.
 
 ## 3. Profils embarqués et personnalisés
 
@@ -86,48 +89,106 @@ regime-lib \
   --output results_gbpusd
 ```
 
-Utiliser l'extension `.yaml` pour un chemin de profil explicite. La commande
+Utiliser l'extension `.yaml` ou `.yml` pour un chemin de profil explicite. La commande
 `--list-profiles` liste uniquement les profils embarqués.
 
-## 4. Héritage et fusion
+## 4. Un seul héritage pour les paramètres de méthodes
 
-Tout profil autre que `default` est fusionné récursivement avec
-`default.yaml`. Le profil ne redéfinit que les valeurs qu'il modifie :
+[default.yaml](../config/profiles/default.yaml) contient toutes les valeurs
+par défaut. Les profils d'actifs ne décrivent que leurs différences.
+Le chargeur garde ces deux couches séparées : `profil.methodes` contient
+uniquement les surcharges utilisateur, et `profil.method_defaults` les défauts.
+Le résolveur commun au CLI et à Python les applique au timeframe demandé.
 
-- les dictionnaires sont fusionnés récursivement ;
-- les scalaires et les listes du profil remplacent les valeurs par défaut ;
-- les paramètres et timeframes omis restent hérités du profil par défaut.
+L'ordre, du moins prioritaire au plus prioritaire, est :
 
-Par exemple, un profil qui ne définit que
-`methodes.adx.seuil_range: 22.0` conserve les autres paramètres ADX et ceux
-des autres méthodes. Le profil `default` charge directement
-`default.yaml`, sans fusion avec lui-même.
+1. défaut général YAML ;
+2. défaut YAML pour le timeframe ;
+3. surcharge générale du profil ;
+4. surcharge du profil pour le timeframe ;
+5. argument explicite Python ou `--method-params`.
 
-## 5. Priorité de résolution
+Ainsi `shannon.fenetre: 100` dans un profil remplace aussi la valeur M1 de
+200 héritée des défauts. Une surcharge M1 dans ce même profil peut ensuite
+préciser une autre valeur. Les paramètres marqués `per_timeframe=False`
+dans leur schéma sont interdits sous `timeframes`.
 
-Lorsqu'un détecteur résout un paramètre, l'ordre de priorité est :
+Les sections générales (`donnees`, `context`, `segmentation`) conservent
+leur fusion récursive historique : dictionnaires fusionnés, listes et
+scalaires remplacés. Cette fusion n'est jamais appliquée à `methodes`.
+Les chemins des ressources de contexte gardent leur convention existante,
+décrite dans [le guide du contexte](./context.md).
 
-1. paramètre explicite du constructeur ;
-2. valeur correspondante dans le profil passé au détecteur ;
-3. valeur de `default.yaml` ;
-4. valeur de secours codée dans la méthode.
+Un chemin utilisateur nommé `default.yaml` est traité comme tout autre
+profil utilisateur. Seul le nom court `default` ou le chemin du fichier
+embarqué désigne le profil de référence.
 
-Dans le CLI, `--method-params` transmet les paramètres comme valeurs
-explicites et prend donc priorité sur le profil :
+### Valeurs absentes et calcul automatique
 
-```bash
-regime-lib \
-  --url data/EURUSD_M1.parquet \
-  --timeframe H1 \
-  --methods adx \
-  --profile eurusd \
-  --method-params '{"adx": {"n_adx": 20}}' \
-  --output results_adx20
+Une clé absente hérite de la couche précédente. Dans les profils YAML,
+`null` est accepté uniquement pour `min_periods` (ATR/Kaufman) et
+`min_periods_c` (Minkowski) : le schéma calcule alors la moitié entière de
+la fenêtre **effective**, avec un minimum de 1. Les défauts utilisent cette
+règle, sans recopier les demi-fenêtres dans chaque timeframe.
+Une valeur numérique explicite de chauffe reste fixe ; elle doit être
+inférieure ou égale à la fenêtre.
+
+Pour compatibilité, un argument Python `None` ou JSON `null` dans
+`--method-params` signifie « argument absent ». Pour réactiver une chauffe
+automatique après une valeur fixe du profil, mettre `null` dans le profil.
+Les arguments CLI sont scalaires ; utiliser un profil pour les surcharges
+par timeframe. Les clés YAML dupliquées et les fusions YAML `<<` sont
+refusées : l'héritage appartient au résolveur de profils.
+
+## 5. API Python, inspection et migration
+
+```python
+from regime_lib.config import load_profile
+from regime_lib.methods.trend.adx import ADXDetector
+
+profil = load_profile("eurusd")
+detecteur = ADXDetector(
+    timeframe="H1", profile=profil.for_method("adx"), n_adx=20,
+)
+print(detecteur.params)         # valeurs effectives, timeframe inclus
+print(detecteur.param_sources)  # provenance de chaque paramètre de méthode
 ```
 
-Pour les paramètres dépendant du timeframe, la méthode cherche d'abord la
-valeur dans `methodes.<méthode>.timeframes.<timeframe>`, puis dans les
-paramètres généraux de cette méthode.
+L'instanciation directe `ADXDetector(timeframe="H1")` utilise le même
+résolveur et les mêmes défauts. Un dictionnaire `profile={...}` reste
+accepté comme couche de surcharges brute.
+
+Chaque profil chargé capture les défauts et les surcharges à cet instant.
+Les appels `profil.for_method(...)` fournissent des copies isolées. Une
+modification du fichier n'affecte pas les instances ou profils existants :
+appeler de nouveau `load_profile(...)` pour recharger. Une nouvelle
+instanciation directe sans profil lit les défauts actuels ; aucun cache
+global ne fige le YAML. Un fichier manquant, corrompu ou incomplet produit
+une erreur, même si un argument explicite aurait fourni la valeur absente.
+
+Afficher la configuration sans charger de données :
+
+```bash
+regime-lib --show-config --profile eurusd --timeframe M1,H1 \
+  --methods adx,shannon --method-params '{"adx": {"n_adx": 20}}'
+```
+
+La sortie JSON expose, par timeframe et méthode, `params`, `sources` et
+`params_hash`. Ces informations sont aussi exportées sous `effective_config`
+dans `run_meta.json`. Le hash de méthode porte sur les valeurs effectives,
+indépendamment de leur provenance ; le hash du profil couvre les deux couches.
+
+**Migration :** remplacer les accès aux sous-profils supposés fusionnés
+(`profil.methodes["adx"]`) par `profil.for_method("adx")` lors de la
+construction. Pour lire les valeurs finales, consulter `detecteur.params`.
+`load_profile("default").methodes` est désormais vide puisqu'il ne porte
+aucune surcharge. Les constantes de secours des détecteurs et leur ancienne
+méthode `_resolve` ont été supprimées. Les anciens hashes ne sont pas
+comparables aux nouveaux hashes effectifs.
+
+Le profil EURUSD conserve sa surcharge générale Shannon `fenetre: 100` :
+elle s'applique désormais à tous les timeframes. Pour conserver une fenêtre
+M1/M5 de 200, l'indiquer explicitement sous `timeframes` dans ce profil.
 
 ## 6. Paramètres des méthodes
 
@@ -310,8 +371,8 @@ choisi.
 
 Les options `donnees.source` et `donnees.timeframes` documentent le profil,
 mais ne remplacent pas le fichier source ou l'option CLI `--timeframe`.
-L'exécution CLI nécessite toujours `--url`, `--timeframe`, `--methods` et
-`--output`.
+L'exécution CLI nécessite `--url`, `--timeframe`, `--methods` et
+`--output`. Le mode `--show-config` exige seulement `--timeframe` et `--methods`.
 
 L'agrégation tick vers M1 est actuellement détectée automatiquement par le
 chargeur et utilise le Bid par défaut. `donnees.tick_aggregation`, bien que

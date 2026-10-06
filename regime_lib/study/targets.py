@@ -64,6 +64,8 @@ def parser_cible(nom: str) -> tuple[str, int]:
     k = int(k_str)
     if k < 1:
         raise ValueError(f"K doit être >= 1, reçu {k}.")
+    if famille == "vol" and k < 2:
+        raise ValueError("vol_fwd_1 non définie : la volatilité exige K >= 2.")
     return famille, k
 
 
@@ -156,7 +158,7 @@ def liste_cibles(
     Returns
     -------
     list[str]
-        Noms triés (ex. ['ret_fwd_1', 'ret_fwd_5', 'vol_fwd_1', ...]).
+        Noms triés (ex. ['ret_fwd_1', 'ret_fwd_5', 'vol_fwd_5', ...]).
     """
     if horizons is None:
         horizons = [1, 5, 20]
@@ -166,4 +168,5 @@ def liste_cibles(
         f"{fam}_fwd_{k}"
         for fam in familles
         for k in horizons
+        if not (fam == "vol" and k == 1)
     ]

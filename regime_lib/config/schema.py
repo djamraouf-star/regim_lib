@@ -2,13 +2,16 @@
 Schéma de configuration : structures de données validées.
 
 Les dataclasses définissent la forme **générale** d'un profil. Les
-paramètres spécifiques à chaque méthode restent libres (dict) : chaque
-méthode valide les siens dans son constructeur.
+paramètres des méthodes restent des surcharges brutes ; leurs schémas
+déclaratifs sont validés par le chargeur et le résolveur commun.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
+
+from regime_lib.config.parameters import MethodProfile
 from pathlib import Path
 from typing import Any
 
@@ -217,8 +220,7 @@ class ProfilConfig:
     donnees : DonneesConfig
         Configuration de la source et des timeframes.
     methodes : dict[str, dict]
-        Paramètres par méthode. Structure libre : chaque méthode lit
-        ce dont elle a besoin et ignore le reste.
+        Surcharges brutes par méthode, sans injection des défauts.
     context : ContextConfig
         Configuration du contexte temporel (sessions, événements).
     segmentation : SegmentationConfig
@@ -237,6 +239,18 @@ class ProfilConfig:
         default_factory=SegmentationConfig
     )
     source_path: Path | None = None
+    method_defaults: dict[str, dict] | None = field(default=None, repr=False)
+
+    def for_method(self, name: str) -> MethodProfile:
+        """Fournit un instantané isolé pour le CLI comme pour l'API Python."""
+        from regime_lib.core.registry import METHOD_REGISTRY
+        if name not in METHOD_REGISTRY:
+            raise ValueError(f"methodes.{name}: méthode inconnue.")
+        return MethodProfile(
+            name, deepcopy(self.method_defaults.get(name, {})),
+            deepcopy(self.methodes.get(name, {})),
+            str(self.source_path) if self.source_path else "profile",
+        )
 
     def __post_init__(self) -> None:
         if not self.nom:
@@ -259,3 +273,13 @@ class ProfilConfig:
             raise ValueError(
                 "ProfilConfig.context doit être un ContextConfig."
             )
+        from regime_lib.config.loader import _validate_methods, load_profile
+        if self.method_defaults is None:
+            self.method_defaults = load_profile("default").method_defaults
+        self.method_defaults = deepcopy(self.method_defaults)
+        self.methodes = deepcopy(self.methodes)
+        _validate_methods(self.method_defaults, {}, "default")
+        _validate_methods(
+            self.method_defaults, self.methodes,
+            str(self.source_path) if self.source_path else "profile",
+        )

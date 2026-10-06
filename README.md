@@ -119,7 +119,16 @@ regime-lib --list-profiles
 ```
 
 Un profil peut être choisi avec `--profile`, et les paramètres d'une
-méthode peuvent être surchargés avec `--method-params` (JSON). Utiliser
+méthode peuvent être surchargés avec `--method-params` (JSON). Afficher les
+paramètres effectifs et leur provenance sans charger de données :
+
+```bash
+regime-lib --show-config --profile eurusd --timeframe H1 --methods adx,shannon
+```
+
+CLI et API Python partagent un résolveur unique et des schémas stricts.
+Voir [les priorités et la migration des profils](./regime_lib/doc/config.md).
+Utiliser
 `regime-lib --help` pour la liste complète des options.
 
 ## Méthodes disponibles

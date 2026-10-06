@@ -2,15 +2,133 @@
 
 **Date :** 4 octobre 2026. **Révision auditée :** [1f73f32](https://github.com/djamraouf-star/regim_lib/commit/1f73f32ba2b6888d634d25b7f0ab373d14c97c08).
 
-**Suivi mis à jour :** 4 octobre 2026, après les étapes 1 et 2, sur la révision
+**Suivi mis à jour :** 5 octobre 2026, après le chantier YAML appliqué localement
+(non commité). Les étapes 1 et 2 avaient été validées sur la révision
 [67c47ad](https://github.com/djamraouf-star/regim_lib/commit/67c47ad).
+
+## Chantier YAML — livraison locale du 5 octobre 2026
+
+### Défaut architectural identifié
+
+L'héritage des paramètres était implémenté deux fois : fusion profonde des
+méthodes dans [loader.py](./regime_lib/config/loader.py) pour le CLI, puis
+cascade dans [base.py](./regime_lib/core/base.py) pour les instances Python.
+Dans le CLI, la lecture des défauts par la cascade était redondante pour les
+clés déjà fusionnées. En Python direct, elle restait déterminante.
+
+Cette architecture présentait cinq défauts liés à I23 :
+
+1. Deux chemins de résolution pour une même règle métier, avec une priorité
+   ambiguë entre surcharge générale et défaut par timeframe.
+2. Chargement silencieux des défauts : une exception pouvait déclencher les
+   constantes de secours au lieu de signaler un YAML invalide.
+3. Cache global conservant les anciennes valeurs après modification du fichier.
+4. Tables et constantes dupliquées entre les détecteurs et le YAML, susceptibles
+   de diverger.
+5. Paramètres de méthodes sans validation stricte : une faute comme `n_atrr`
+   pouvait être ignorée pendant que `n_atr` était hérité des défauts.
+
+### Décision et architecture livrée
+
+Les **13 détecteurs** déclarent un `PARAM_SCHEMA` unique : clés autorisées,
+types, bornes, possibilité de surcharge par timeframe et contraintes croisées.
+Aucune liste `PARAM_KEYS` indépendante n'est entretenue. Les signatures Python
+conservent leurs arguments nommés ; un test vérifie leur concordance avec les
+schémas. Les valeurs par défaut appartiennent exclusivement au
+[YAML de référence](./regime_lib/config/profiles/default.yaml).
+
+| Composant | Responsabilité après refonte |
+|---|---|
+| [parameters.py](./regime_lib/config/parameters.py) | Schémas déclaratifs, contraintes, résolution commune, valeurs effectives et provenance. |
+| [loader.py](./regime_lib/config/loader.py) et [schema.py](./regime_lib/config/schema.py) | Lecture, validation des profils et conservation séparée des défauts et surcharges de méthodes. |
+| [base.py](./regime_lib/core/base.py) et [détecteurs](./regime_lib/methods/) | Consommation des paramètres résolus ; suppression de l'ancienne cascade, du cache et des constantes de secours. |
+| [cli.py](./regime_lib/cli.py) | Construction par le même résolveur, inspection sans données et export des paramètres effectifs. |
+
+Priorité, du moins prioritaire au plus prioritaire :
+
+**Défaut général → défaut du timeframe → surcharge générale du profil →
+surcharge du timeframe du profil → argument explicite Python/CLI.**
+
+La fusion profonde ne concerne plus `methodes`. Les sections générales
+`donnees`, `context` et `segmentation` conservent leur comportement historique.
+Leur refonte complète ne fait pas partie de cette livraison.
+
+Les clés inconnues, valeurs non finies, types invalides, timeframes inconnus,
+contraintes incompatibles et clés YAML dupliquées sont rejetés. Les fusions
+YAML `<<` sont également refusées. Le chargement vérifie toutes les méthodes
+et tous les timeframes du profil, y compris ceux non sélectionnés pour un run.
+Un fichier par défaut absent, corrompu ou incomplet n'active aucun secours codé.
+
+Un profil chargé capture les valeurs à cet instant ; `for_method(...)` fournit
+une copie isolée de ses couches. Recharger avec `load_profile(...)` prend en
+compte les changements du fichier. Les instances déjà créées restent stables.
+Une nouvelle instanciation directe sans profil lit les défauts actuels.
+
+### Migration et changements observables
+
+- Construire les détecteurs avec `profile=profil.for_method("adx")` plutôt
+  qu'avec un sous-dictionnaire supposé fusionné. `profil.methodes` contient
+  uniquement les surcharges ; il est vide pour le profil `default`.
+- Lire les valeurs finales dans `detecteur.params` et leur provenance dans
+  `detecteur.param_sources`. Un dictionnaire brut reste accepté comme surcharge.
+- Les demi-fenêtres de chauffe sont calculées à partir de la fenêtre effective
+  lorsque le profil contient `null` pour `min_periods` ou `min_periods_c`.
+  Une chauffe numérique reste fixe et doit respecter les bornes de sa fenêtre.
+- Un argument Python `None` ou un JSON `null` dans `--method-params` signifie
+  « argument absent ». Réactiver une chauffe automatique se fait dans le profil.
+- La surcharge générale Shannon EURUSD `fenetre: 100` s'applique désormais à
+  tous les timeframes. Pour conserver M1/M5 à 200, les préciser dans le profil.
+- Les hashes portent maintenant sur les paramètres effectifs, timeframe inclus ;
+  les anciens hashes ne sont pas comparables aux nouveaux. La provenance ne
+  change pas le hash d'une méthode à valeurs effectives identiques.
+- Un chemin utilisateur nommé `default.yaml` est effectivement chargé. HMM et
+  `n_bins` Shannon suivent désormais le résolveur commun.
+
+Inspection sans chargement de données :
+
+```bash
+regime-lib --show-config --profile eurusd --timeframe M1,H1 --methods adx,shannon
+```
+
+Le JSON expose `params`, `sources` et `params_hash` par méthode/timeframe.
+Ces éléments sont également exportés sous `effective_config` dans le fichier
+`run_meta.json` de chaque run. Voir le [guide de migration](./regime_lib/doc/config.md)
+et le [guide d'ajout d'une méthode](./regime_lib/doc/adding_method.md).
+
+### Validation exécutée et limites
+
+```bash
+.venv/bin/python -m pytest --ignore=tests/test_screening_eurusd.py -o addopts='' -q
+.venv/bin/python -m pytest tests/test_config_profiles.py tests/test_config_cli.py -o addopts='' -q
+```
+
+**Résultats : 429 tests réussis sur la suite avec exclusion ; 48 tests ciblés
+réussis** dans [test_config_profiles.py](./tests/test_config_profiles.py) et
+[test_config_cli.py](./tests/test_config_cli.py). Ces 48 cas remplacent les deux
+anciens tests de profils, soit 46 cas supplémentaires. Ils couvrent les
+priorités, la validation, le rechargement, l'équivalence CLI/Python des 13
+détecteurs et la cohérence entre paramètres exportés et hashes du parquet.
+Les tests ciblés ont été relancés après la simplification finale du YAML.
+Les liens locaux des documents modifiés et `git diff --check` ont été vérifiés.
+
+L'avertissement joblib sur les cœurs physiques reste présent. Le
+[test de screening](./tests/test_screening_eurusd.py) reste exclu pour son
+import absent : **I24 reste ouvert**, la suite complète n'est pas validée.
+Les ressources YAML/CSV sont déclarées dans [pyproject.toml](./pyproject.toml),
+mais aucune construction/installation autonome de wheel n'a été validée ; les
+outils de construction manquent dans l'environnement virtuel utilisé. Les
+dépendances directes SciPy/ruptures restent à traiter : **I26 reste ouvert**.
+
+Cette livraison ne démontre ni causalité ni validité statistique des méthodes.
+Les étapes 3 à 5 restent à réaliser. Pour I22, les versions du code et des
+dépendances ainsi que les empreintes des données et du support restent ouvertes.
 
 ## Portée et conclusion
 
 L'audit initial était statique et concernait la révision 1f73f32 ; sa suite de
 tests n'avait pas été exécutée. Les tableaux de constats ci-dessous conservent
-cet état initial pour la traçabilité. **Le tableau de suivi fait foi pour leur
-statut après correction.** Cette mise à jour ne constitue pas un nouvel audit
+cet état initial pour la traçabilité. **Le tableau de suivi actualisé et la section du chantier YAML font foi
+pour leur statut après correction.** Cette mise à jour ne constitue pas un nouvel audit
 exhaustif des méthodes.
 
 L'objectif est de comparer les familles d'indicateurs en projetant leurs
@@ -27,7 +145,7 @@ ordinales sur catégories (C4) et l'inférence statistique (C5) restent à corri
 Les données de marché ne sont pas incluses dans le dépôt et aucune performance
 empirique ni supériorité d'une méthode n'est établie.
 
-## Suivi des corrections — étapes 1 et 2
+## Suivi des corrections — étapes 1 et 2 et chantier YAML
 
 **Étape 1 livrée :** [contrat v1.0.0](./regime_lib/doc/protocole_projection_mesure.md),
 avec unités de projection, cinq mesures, conventions temporelles et exemples
@@ -36,7 +154,7 @@ numériques. Une convention documentée n'est pas considérée comme implément�
 **Étape 2 livrée :** [guide d'alignement et de validité](./regime_lib/doc/alignement_validite.md),
 contrôles et propagation du support jusqu'aux projections et études.
 
-| Réf. | Statut après étape 2 | Correction réalisée / limite restante |
+| Réf. | Statut au 5 octobre 2026 | Correction réalisée / limite restante |
 |---|---|---|
 | C2 | Corrigé pour les horizons en barres | L'étude vérifie l'actif et le timeframe, agrège les prix source plus fins avant de calculer les cibles et refuse les timestamps de régimes absents des prix. Les horizons en durée explicite restent à implémenter. |
 | C3 | Corrigé pour la sélection d'une série/configuration | Sélection actif/timeframe et `params_hash` par méthode ; refus des doublons et mélanges. Comparer simultanément deux configurations d'une même méthode dans un pivot reste hors de l'interface actuelle. |
@@ -47,11 +165,14 @@ contrôles et propagation du support jusqu'aux projections et études.
 | I14 | Corrigé à l'entrée publique | Les NaN OHLC sont rejetés avant le calcul de Kaufman. Le cumul interne n'a pas été transformé en calcul capable de reprendre après un NaN. |
 | I18 | Corrigé pour le support valide | INCONNU, absences, chauffe déclarée et partialité sont exclus ; couverture propre et masque commun par cible exportés. Les compteurs INCONNU et chauffe restent distincts, tous les détecteurs ne déclarant pas une chauffe séparée. |
 | I21 | Corrigé pour l'alignement et les cas invalides | Index stricts, segments manquants/dupliqués ou disjoints refusés, sorties vides prises en charge ; segments traversant des trous attendus ou des barres invalides signalés. |
-| I25 | Partiellement corrigé | 37 tests ciblés ajoutés sur identité, calendrier, projection, validité et support commun. Les tests spécifiques de causalité VPIN/pivots/HMM et les références numériques des nouvelles mesures restent à ajouter. |
+| I25 | Partiellement corrigé | 37 tests ciblés ajoutés sur identité, calendrier, projection, validité et support commun ; 48 cas couvrent désormais la configuration et son intégration CLI. Les tests spécifiques de causalité VPIN/pivots/HMM et les références numériques des nouvelles mesures restent à ajouter. |
 | C1, I1, I9, I10 | À réaliser — étape 3 | Le contrat décrit les modes rétrospectif et disponible à date. Clôture des buckets VPIN, métadonnées de disponibilité, événements de pivots et filtrage avant HMM ne sont pas encore implémentés. |
 | C4, I7, I8, I15–I17, I20 | À réaliser — étape 4 | Les mesures communes, la sémantique des scores et la suppression des classements arbitraires restent à implémenter. L'accord utilise désormais un support commun, mais une pureté parfaite d'un détecteur constant reste possible. |
 | C5, I2, I19 | À réaliser — étape 5 | Dépendance temporelle, comparaisons multiples, purge et exports statistiques complets restent ouverts. |
-| I22–I24, I26 | À réaliser — étape 6 | Paramètres effectifs, cascade de configuration, collecte complète des tests et packaging restent ouverts. |
+| I22 | Partiellement corrigé — étape 6 | Paramètres effectifs, provenance et hashes livrés. Versions du code/dépendances et empreintes des données/support restent ouvertes. |
+| I23 | Corrigé pour les paramètres de méthodes | Schémas déclaratifs et résolveur CLI/Python uniques ; priorités, HMM, Shannon et chemin utilisateur `default.yaml` corrigés. Migration documentée. |
+| I24 | À réaliser — étape 6 | La collecte complète reste bloquée par le module de screening absent. |
+| I26 | Partiellement traité, reste ouvert — étape 6 | Ressources YAML/CSV déclarées ; dépendances directes et installation autonome restent à vérifier/corriger. |
 | I11–I13, M1–M4 | Non traités dans ces livraisons | Fidélité des indicateurs et maintenance à traiter séparément selon le périmètre retenu. |
 
 Les nouveaux exports transportent les métadonnées de source disponibles. Un
@@ -59,7 +180,7 @@ ancien parquet qui ne déclare pas sa source, son côté de prix, ses ajustement
 ou son calendrier ne permet pas de certifier ces dimensions par rétro-inférence.
 Le hash utilisé pour sélectionner une configuration reste soumis à I22.
 
-### Validation effectivement exécutée
+### Validation historique des étapes 1 et 2 — 4 octobre 2026
 
 Sur la révision 67c47ad, avec Python 3.14 et un environnement local contenant
 les dépendances du projet ainsi que SciPy et ruptures installés explicitement :
@@ -154,7 +275,7 @@ Points solides : registre extensible, seuils historiques décalés pour ATR/Kauf
 
 ## MINEUR
 
-- **M1 — Rapport spécialisé présenté comme générique.** [utils/report.py](./regime_lib/utils/report.py), `extraire_etats_int`, `rapport_complet`, `matrice_transition` : seuls les labels HMM sont reconnus ; supprimer les inconnus crée aussi des transitions artificielles. Généraliser ou restreindre l'API et compter uniquement les transitions adjacentes.
+- **M1 — Rapport spécialisé présenté comme générique.** [study/report.py](./regime_lib/study/report.py), `extraire_etats_int`, `rapport_complet`, `matrice_transition` : seuls les labels HMM sont reconnus ; supprimer les inconnus crée aussi des transitions artificielles. Généraliser ou restreindre l'API et compter uniquement les transitions adjacentes.
 - **M2 — Mémoire du chargement par lots.** [data_loader.py](./regime_lib/core/data_loader.py), `_charger_tick_par_lots` : tous les lots restent en mémoire avant concaténation. Agréger progressivement ou documenter cette limite.
 - **M3 — Duplication et éléments inutilisés.** [methods/__init__.py](./regime_lib/methods/__init__.py), masques de [VPIN](./regime_lib/methods/volume/vpin.py)/[Volume Profile](./regime_lib/methods/volume/volume_profile.py), `_classify_mss_choch` dans [mss_choch.py](./regime_lib/methods/price/mss_choch.py) : exports/masques dupliqués et variables/arguments inutilisés. Centraliser et simplifier. Aucune dépendance déclarée entièrement sans usage n'a été démontrée.
 - **M4 — Versions et documentation.** [pyproject.toml](./pyproject.toml), [__init__.py](./regime_lib/__init__.py), [methods/__init__.py](./regime_lib/methods/__init__.py), [volume.md](./regime_lib/doc/volume.md) : versions divergentes et méthodes actives décrites comme futures. Centraliser version et inventaire.
@@ -190,10 +311,16 @@ Les excursions futures maximales décrivent une opportunité rétrospective ; el
    dépendance temporelle, comparaisons multiples et frontières des périodes ;
    exporter toutes les périodes/modalités/horizons et leur stabilité. Confirmation
    indépendante si une sélection est présentée comme stable.
-6. **Étape 6 — À réaliser : reproductibilité.** Enregistrer paramètres effectifs,
-   versions du protocole et du code, empreintes des données et du support ; unifier
-   la configuration ; réparer la collecte et vérifier dépendances/ressources dans
-   une installation autonome.
+6. **Étape 6 — Partiellement livrée par anticipation : reproductibilité.**
+   Configuration unifiée, paramètres effectifs, provenance et hashes livrés dans
+   le chantier YAML. Restent : versions du protocole/code/dépendances, empreintes
+   des données et du support, réparation de la collecte complète et vérification
+   des dépendances/ressources dans une installation autonome.
+
+**Ordre de reprise recommandé :** terminer la collecte et l'installation
+(I24/I26) pour disposer d'une base de validation complète, puis reprendre les
+étapes 3, 4 et 5. La numérotation historique est conservée ; le chantier YAML
+constitue une livraison anticipée d'une partie de l'étape 6.
 
 Les corrections de fidélité des indicateurs I11–I13 restent distinctes du contrat
 commun. Les sujets de maintenance M1–M4 restent secondaires sauf s'ils bloquent

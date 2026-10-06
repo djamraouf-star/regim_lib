@@ -49,6 +49,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -162,16 +163,17 @@ class MSSCHOCHDetector(RegimeDetector):
     }
     requires_lookahead = True
 
-    N_FRACTALE: dict[str, int] = {
-        "M1": 5, "M5": 5, "M15": 5, "M30": 5,
-        "H1": 5, "H4": 5, "D1": 5, "W1": 5,
-    }
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "n_fractale": Parameter(int, minimum=1, per_timeframe=True),
+        },
+    )
 
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         n_fractale: int | None = None,
     ) -> None:
         super().__init__(
@@ -180,13 +182,6 @@ class MSSCHOCHDetector(RegimeDetector):
             profile=profile,
             n_fractale=n_fractale,
         )
-        self.n_fractale = int(self._resolve(
-            "n_fractale", n_fractale,
-            default=self.N_FRACTALE.get(timeframe or "", 5),
-            per_timeframe=True,
-        ))
-        if self.n_fractale < 1:
-            raise ValueError("n_fractale doit être >= 1.")
 
     @staticmethod
     def _unaligned_mask(

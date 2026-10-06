@@ -35,17 +35,19 @@ Structure d'un profil
 
 Héritage
 --------
-Tout profil hérite automatiquement du profil `default.yaml`. Il ne
-redéfinit que ce qu'il change. La fusion est **profonde** (deep merge) :
-si le profil ne définit qu'une partie de `methodes.atr_volatility`,
-le reste vient du default.
+Les défauts YAML et les surcharges restent séparés jusqu'au résolveur
+commun. Les paramètres effectifs et leur provenance sont disponibles
+sur le détecteur. Voir doc/config.md pour les priorités et la migration.
 
 Usage
 -----
     from regime_lib.config import load_profile
-    
+    from regime_lib.methods.trend.adx import ADXDetector
+
     profil = load_profile("eurusd")
-    params = profil.methodes["atr_volatility"]["timeframes"]["H1"]
+    detecteur = ADXDetector(timeframe="H1", profile=profil.for_method("adx"))
+    params = detecteur.params
+
 """
 
 from regime_lib.config.schema import DonneesConfig, ProfilConfig

@@ -22,6 +22,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -78,11 +79,21 @@ class ShannonEntropyDetector(RegimeDetector):
     }
     requires_lookahead = False
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "fenetre": Parameter(int, minimum=10, per_timeframe=True),
+            "n_bins": Parameter(int, minimum=2, per_timeframe=True),
+            "seuil_ordonne": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "seuil_desordre": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+        },
+        constraints=(Ordered("seuil_ordonne", "seuil_desordre"),),
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         fenetre: int | None = None,
         n_bins: int | None = None,
         seuil_ordonne: float | None = None,
@@ -97,25 +108,6 @@ class ShannonEntropyDetector(RegimeDetector):
             seuil_ordonne=seuil_ordonne,
             seuil_desordre=seuil_desordre,
         )
-        self.fenetre = int(self._resolve(
-            "fenetre", fenetre, default=100, per_timeframe=True,
-        ))
-        self.n_bins = int(self._resolve("n_bins", n_bins, default=10))
-        self.seuil_ordonne = float(self._resolve(
-            "seuil_ordonne", seuil_ordonne, default=0.65
-        ))
-        self.seuil_desordre = float(self._resolve(
-            "seuil_desordre", seuil_desordre, default=0.78
-        ))
-
-        if self.fenetre < 10:
-            raise ValueError("fenetre doit être >= 10.")
-        if self.n_bins < 2:
-            raise ValueError("n_bins doit être >= 2.")
-        if not (0.0 < self.seuil_ordonne < self.seuil_desordre < 1.0):
-            raise ValueError(
-                "Il faut 0 < seuil_ordonne < seuil_desordre < 1."
-            )
 
     @staticmethod
     def _unaligned_mask(

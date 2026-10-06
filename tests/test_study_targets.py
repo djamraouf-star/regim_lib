@@ -77,4 +77,5 @@ def test_liste_cibles():
     noms = liste_cibles(horizons=[1, 5], familles=["ret", "vol"])
     assert "ret_fwd_1" in noms
     assert "vol_fwd_5" in noms
-    assert len(noms) == 4
+    assert len(noms) == 3
+    assert "vol_fwd_1" not in noms

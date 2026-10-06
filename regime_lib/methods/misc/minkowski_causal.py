@@ -29,7 +29,7 @@ Mesures exposées
 
 Résolution des paramètres
 -------------------------
-Cascade : explicite > profile > default.yaml > fallback.
+Résolveur commun : explicite > surcharges du profil > défauts YAML.
 
 Causalité
 ---------
@@ -48,6 +48,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -82,11 +83,21 @@ class MinkowskiCausalDetector(RegimeDetector):
     }
     requires_lookahead = False
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "fenetre_c": Parameter(int, minimum=2, per_timeframe=True),
+            "min_periods_c": Parameter(int, minimum=1, per_timeframe=True, half_window="fenetre_c"),
+            "q_c": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "seuil_lightlike": Parameter(float, minimum=0),
+        },
+        constraints=(Ordered("min_periods_c", "fenetre_c", equal=True),),
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         fenetre_c: int | None = None,
         min_periods_c: int | None = None,
         q_c: float | None = None,
@@ -101,38 +112,6 @@ class MinkowskiCausalDetector(RegimeDetector):
             q_c=q_c,
             seuil_lightlike=seuil_lightlike,
         )
-
-        self.fenetre_c = int(self._resolve(
-            "fenetre_c", fenetre_c, default=500,
-            per_timeframe=True,
-        ))
-        resolved_min = self._resolve(
-            "min_periods_c", min_periods_c, default=None,
-            per_timeframe=True,
-        )
-        if resolved_min is not None:
-            self.min_periods_c = int(resolved_min)
-        else:
-            self.min_periods_c = max(1, self.fenetre_c // 2)
-
-        self.q_c = float(self._resolve("q_c", q_c, default=0.90))
-        self.seuil_lightlike = float(self._resolve(
-            "seuil_lightlike", seuil_lightlike, default=0.01
-        ))
-
-        if self.fenetre_c < 2:
-            raise ValueError("fenetre_c doit être >= 2.")
-        if self.min_periods_c < 1:
-            raise ValueError("min_periods_c doit être >= 1.")
-        if self.min_periods_c > self.fenetre_c:
-            raise ValueError(
-                "min_periods_c doit être <= fenetre_c "
-                f"(reçu min={self.min_periods_c}, fenetre={self.fenetre_c})."
-            )
-        if not (0.0 < self.q_c < 1.0):
-            raise ValueError("q_c doit être dans (0, 1).")
-        if self.seuil_lightlike < 0.0:
-            raise ValueError("seuil_lightlike doit être >= 0.")
 
     @staticmethod
     def _unaligned_mask(

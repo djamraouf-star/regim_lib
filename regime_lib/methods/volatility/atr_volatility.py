@@ -26,8 +26,8 @@ Résolution des paramètres
 Par ordre de priorité décroissante :
 
     1. Argument explicite au constructeur (ex. n_atr=20)
-    2. Sous-profil `profile` (via _resolve, avec recherche par timeframe)
-    3. Valeur codée en dur (N_ATR, FENETRE_QUANTILE)
+    2. Surcharges du profil, spécifiques au timeframe puis générales
+    3. Défauts YAML, spécifiques au timeframe puis généraux
 
 Voir `regime_lib/config/profiles/default.yaml` pour le profil par défaut et
 `regime_lib/config/loader.py` pour le chargement des profils.
@@ -56,6 +56,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -73,8 +74,8 @@ class ATRVolatilityDetector(RegimeDetector):
 
     Paramètres dépendant du timeframe
     ---------------------------------
-    N_ATR et FENETRE_QUANTILE sont indexés par timeframe. Ces valeurs
-    servent de fallback si aucun profil n'est fourni.
+    Les périodes et fenêtres par timeframe sont définies dans le YAML
+    par défaut, puis résolues par la couche configuration commune.
 
     Phase de chauffe (`min_periods`)
     --------------------------------
@@ -99,22 +100,23 @@ class ATRVolatilityDetector(RegimeDetector):
     }
     requires_lookahead = False
 
-    # Fallback : valeurs par défaut par timeframe (utilisées si aucun
-    # profil et aucun argument explicite).
-    N_ATR: dict[str, int] = {
-        "M1": 20, "M5": 20, "M15": 14, "M30": 14,
-        "H1": 14, "H4": 14, "D1": 14, "W1": 14,
-    }
-    FENETRE_QUANTILE: dict[str, int] = {
-        "M1": 30_000, "M5": 6_000, "M15": 2_000, "M30": 1_000,
-        "H1": 500, "H4": 125, "D1": 21, "W1": 12,
-    }
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "n_direction": Parameter(int, minimum=1),
+            "q_low": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "q_high": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "n_atr": Parameter(int, minimum=1, per_timeframe=True),
+            "fenetre": Parameter(int, minimum=2, per_timeframe=True),
+            "min_periods": Parameter(int, minimum=1, per_timeframe=True, half_window="fenetre"),
+        },
+        constraints=(Ordered("q_low", "q_high"), Ordered("min_periods", "fenetre", equal=True),),
+    )
 
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         n_direction: int | None = None,
         q_low: float | None = None,
         q_high: float | None = None,
@@ -133,56 +135,6 @@ class ATRVolatilityDetector(RegimeDetector):
             fenetre=fenetre,
             min_periods=min_periods,
         )
-
-        # --- Résolution en cascade --------------------------------------
-        # Priorité : explicite > profil > fallback codé en dur.
-        self.n_direction = int(self._resolve(
-            "n_direction", n_direction, default=20
-        ))
-        self.q_low = float(self._resolve(
-            "q_low", q_low, default=0.33
-        ))
-        self.q_high = float(self._resolve(
-            "q_high", q_high, default=0.67
-        ))
-        self.n_atr = int(self._resolve(
-            "n_atr", n_atr,
-            default=self.N_ATR.get(timeframe or "", 14),
-            per_timeframe=True,
-        ))
-        self.fenetre = int(self._resolve(
-            "fenetre", fenetre,
-            default=self.FENETRE_QUANTILE.get(timeframe or "", 500),
-            per_timeframe=True,
-        ))
-
-        # min_periods : cas particulier — la valeur par défaut dépend de
-        # fenetre (fenetre // 2). On la résout après fenetre.
-        resolved_min = self._resolve(
-            "min_periods", min_periods, default=None,
-            per_timeframe=True,
-        )
-        if resolved_min is not None:
-            self.min_periods = int(resolved_min)
-        else:
-            self.min_periods = max(1, self.fenetre // 2)
-
-        # --- Validations ------------------------------------------------
-        if self.n_direction < 1:
-            raise ValueError("n_direction doit être >= 1.")
-        if self.n_atr < 1:
-            raise ValueError("n_atr doit être >= 1.")
-        if self.fenetre < 2:
-            raise ValueError("fenetre doit être >= 2.")
-        if not (0.0 < self.q_low < self.q_high < 1.0):
-            raise ValueError("Il faut 0 < q_low < q_high < 1.")
-        if self.min_periods < 1:
-            raise ValueError("min_periods doit être >= 1.")
-        if self.min_periods > self.fenetre:
-            raise ValueError(
-                "min_periods doit être <= fenetre "
-                f"(reçu min_periods={self.min_periods}, fenetre={self.fenetre})."
-            )
 
     # ------------------------------------------------------------------
     # fit_predict

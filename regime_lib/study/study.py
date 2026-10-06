@@ -5,19 +5,29 @@ Orchestrateur d'étude : assemble features, cibles, split, évaluation.
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import os
+from tempfile import TemporaryDirectory
+from regime_lib.study.provenance import manifest, file_hash, frame_info
+
+from regime_lib.study.inference import InferenceConfig, bootstrap_modalities, correct_family
 from typing import Callable
 
 import numpy as np
 import pandas as pd
 
-from regime_lib.core.data_loader import load_parquet, resample
-from regime_lib.core.temporal import resolve_timeframe
-from regime_lib.utils.validation import validate_time_index, validate_ohlcv
+from regime_lib.core.data_loader import load_parquet
+from regime_lib.core.temporal import expected_grid
+from regime_lib.study.validation import prepare_prices
+from regime_lib.utils.validation import validate_time_index
 from regime_lib.study.evaluation import (
     hit_rate_directionnel,
+    feature_type,
+    FEATURE_TYPES,
     ic_spearman,
     stats_conditionnelles,
     par_modalite_tests,
+    stabilite_modalites,
 )
 from regime_lib.study.features import extraire_features
 from regime_lib.study.split import (
@@ -25,7 +35,7 @@ from regime_lib.study.split import (
     split_in_sample,
     split_walk_forward,
 )
-from regime_lib.study.targets import calculer_cible
+from regime_lib.study.targets import calculer_cible, parser_cible
 
 
 SCHEMAS_SPLIT: dict[str, Callable] = {
@@ -50,8 +60,8 @@ class Study:
         Résultats de l'évaluation après `run()`.
     resultats_tests : dict | None
         Batterie de tests statistiques (Welch, Mann-Whitney,
-        z de proportions) par paire (feature, cible), sur le fold 0.
-        Clés : tuples `(nom_feature, nom_cible)`.
+        z de proportions) par paire (feature, cible), sur chaque fold.
+        Clés : tuples `(fold, nom_feature, nom_cible)`.
     """
 
     def __init__(
@@ -71,6 +81,8 @@ class Study:
         ohlcv_asset: str | None = None,
         ohlcv_timeframe: str | None = None,
         expected_index: pd.DatetimeIndex | None = None,
+        feature_types: dict[str, str] | None = None,
+        inference: InferenceConfig | None = None,
         **split_kwargs,
     ) -> None:
         if split not in SCHEMAS_SPLIT:
@@ -79,6 +91,14 @@ class Study:
                 f"Valides : {sorted(SCHEMAS_SPLIT)}."
             )
 
+        if inference is not None and not isinstance(inference, InferenceConfig):
+            raise TypeError("inference doit être une InferenceConfig.")
+        if inference is not None and not tests_modalite:
+            raise ValueError("inference requiert tests_modalite=True.")
+        self.inference = inference
+        self.feature_types = dict(feature_types or {})
+        if any(value not in FEATURE_TYPES for value in self.feature_types.values()):
+            raise ValueError("Type de feature inconnu dans feature_types.")
         self.regimes_path = Path(regimes_path)
         self.ohlcv_path = Path(ohlcv_path)
         self.ohlcv_data = ohlcv_data
@@ -96,6 +116,11 @@ class Study:
         if targets is None:
             targets = ["ret_fwd_5"]
 
+        for target in targets:
+            _, horizon = parser_cible(target)
+            if inference is not None and inference.block_size < horizon:
+                raise ValueError("block_size doit être >= à l’horizon de chaque cible.")
+
         self.noms_features = features
         self.noms_cibles = targets
         self.methodes = methodes
@@ -106,23 +131,37 @@ class Study:
 
         self.df_features: pd.DataFrame | None = None
         self.df_cibles: pd.DataFrame | None = None
+        self.df_fin_cibles: pd.DataFrame | None = None
         self.resultats: pd.DataFrame | None = None
         self.resultats_tests: dict | None = None
+        self.stabilite_modalites: pd.DataFrame | None = None
         self._detail_conditionnel: dict | None = None
+        self.metadata: dict | None = None
+        self._source_metadata: dict = {}
 
     # ------------------------------------------------------------------
     def run(self) -> "Study":
         """
         Exécute l'étude complète : chargement, calcul, évaluation.
         """
+        self.resultats = None
+        self.metadata = None
+        self.resultats_tests = None
+        self._detail_conditionnel = None
+        self._source_metadata = {}
         self._charger_features()
         self._charger_cibles()
         self._evaluer()
+        self.metadata = manifest(self, origin="run")
         return self
 
     # ------------------------------------------------------------------
     def _charger_features(self) -> None:
+        source_hash = file_hash(self.regimes_path)
         df_regimes = pd.read_parquet(self.regimes_path)
+        if file_hash(self.regimes_path) != source_hash:
+            raise ValueError("Le parquet de régimes a changé pendant le chargement.")
+        self._source_metadata["regimes"] = {"path": str(self.regimes_path), "sha256": source_hash}
         df_features = extraire_features(
             df_regimes,
             methodes=self.methodes,
@@ -141,29 +180,24 @@ class Study:
                                        timeframe=self.ohlcv_timeframe)
         else:
             df_ohlcv = self.ohlcv_data.copy()
-        validate_ohlcv(df_ohlcv)
         identity = self.df_features.attrs["series_identity"] if self.df_features is not None else {}
-        source_asset = self.ohlcv_asset or df_ohlcv.attrs.get("asset")
-        if self.ohlcv_asset and df_ohlcv.attrs.get("asset") not in (None, self.ohlcv_asset):
-            raise ValueError("Actif OHLCV explicite incompatible avec les métadonnées.")
-        if identity and source_asset != identity["asset"]:
-            raise ValueError("Actif OHLCV absent ou incompatible avec les régimes.")
-        source_tf = resolve_timeframe(df_ohlcv, self.ohlcv_timeframe)
-        target_tf = identity.get("timeframe", source_tf)
-        for field in ("source", "price_side", "adjustment", "calendar"):
-            if field in identity and identity[field] != df_ohlcv.attrs.get(field):
-                raise ValueError(f"Identité OHLCV incompatible : {field}.")
-        if source_tf != target_tf:
-            if self.expected_index is not None:
-                raise ValueError("Avec expected_index, fournir les OHLCV déjà au timeframe de l'étude.")
-            df_ohlcv = resample(df_ohlcv, target_tf, source_timeframe=source_tf)
-        if self.df_features is not None and not self.df_features.index.isin(df_ohlcv.index).all():
-            raise ValueError("Des timestamps des régimes sont absents des prix : alignement incompatible.")
+        df_ohlcv, target_tf = prepare_prices(
+            df_ohlcv, identity, asset=self.ohlcv_asset, timeframe=self.ohlcv_timeframe,
+            required_index=self.df_features.index if self.df_features is not None else None,
+            expected_index=self.expected_index,
+        )
+        self._source_metadata["prices_prepared"] = frame_info(df_ohlcv)
+        self._source_metadata["prices_origin"] = "ohlcv_data" if self.ohlcv_data is not None else str(self.ohlcv_path)
+        grid = expected_grid(df_ohlcv.index, target_tf, self.expected_index)
+        ends = {}
         cibles = {}
         for nom in self.noms_cibles:
+            _, horizon = parser_cible(nom)
+            ends[nom] = pd.Series(grid, index=grid).shift(-horizon).reindex(df_ohlcv.index)
             cibles[nom] = calculer_cible(df_ohlcv, nom, timeframe=target_tf,
                                         expected_index=self.expected_index)
         self.df_cibles = pd.DataFrame(cibles)
+        self.df_fin_cibles = pd.DataFrame(ends)
 
     def _evaluer(self) -> None:
         if self.df_features is None or self.df_cibles is None:
@@ -200,27 +234,61 @@ class Study:
         # Découpage
         schema = SCHEMAS_SPLIT[self.schema_split]
         paires = schema(common, **self.split_kwargs)
+        self._fold_metadata = [
+            {"fold": fold, "train_start": train[0], "train_end_before_purge": train[-1],
+             "test_start": test[0], "test_end": test[-1],
+             "n_train_before_purge": len(train), "n_test_grid": len(test)}
+            for fold, (train, test) in enumerate(paires)
+        ]
 
+        unknown = set(self.feature_types) - set(features.columns) - {
+            name.split("__", 1)[-1] for name in features.columns
+        }
+        if unknown:
+            raise ValueError(f"Features déclarées absentes : {sorted(unknown)}.")
+        kinds = {
+            name: feature_type(features[name], self.feature_types.get(
+                name, self.feature_types.get(name.split("__", 1)[-1])))
+            for name in features
+        }
         lignes = []
         detail = {}
+        tests_dict = {}
+        timeframe = features.attrs.get("series_identity", {}).get("timeframe")
 
         for fold_id, (idx_train, idx_test) in enumerate(paires):
             for col_feat in features.columns:
                 for col_cible in cibles.columns:
-                    f_train = features.loc[idx_train, col_feat]
-                    c_train = cibles.loc[idx_train, col_cible]
+                    train_index = idx_train
+                    if self.schema_split != "in_sample":
+                        if self.df_fin_cibles is None:
+                            raise ValueError("Dates de fin des cibles absentes : appeler run().")
+                        ends = self.df_fin_cibles[col_cible].reindex(idx_train)
+                        train_index = idx_train[ends.notna() & ends.lt(idx_test[0])]
+                        if train_index.empty:
+                            raise ValueError(f"Train vide après purge : fold {fold_id}, cible {col_cible}.")
+                    f_train = features.loc[train_index, col_feat]
+                    c_train = cibles.loc[train_index, col_cible]
                     f_test = features.loc[idx_test, col_feat]
                     c_test = cibles.loc[idx_test, col_cible]
 
-                    ic_train = ic_spearman(f_train, c_train)
-                    ic_test = ic_spearman(f_test, c_test)
-                    hit_train = hit_rate_directionnel(f_train, c_train)
-                    hit_test = hit_rate_directionnel(f_test, c_test)
+                    ic_train = ic_spearman(f_train, c_train, type_feature=kinds[col_feat])
+                    ic_test = ic_spearman(f_test, c_test, type_feature=kinds[col_feat])
+                    hit_train = hit_rate_directionnel(f_train, c_train, type_feature=kinds[col_feat], nom_cible=col_cible)
+                    hit_test = hit_rate_directionnel(f_test, c_test, type_feature=kinds[col_feat], nom_cible=col_cible)
 
                     lignes.append({
                         "fold": fold_id,
                         "feature": col_feat,
                         "cible": col_cible,
+                        "feature_type": kinds[col_feat],
+                        "n_purge_train": len(idx_train) - len(train_index),
+                        "ic_status_train": ic_train["status"],
+                        "ic_status_test": ic_test["status"],
+                        "hit_status_train": hit_train["status"],
+                        "hit_status_test": hit_test["status"],
+                        "n_hit_train": hit_train["n"],
+                        "n_hit_test": hit_test["n"],
                         "n_train": ic_train["n"],
                         "n_test": ic_test["n"],
                         "ic_train": ic_train["ic"],
@@ -233,28 +301,74 @@ class Study:
 
                     # Détail conditionnel (test uniquement)
                     cle = (fold_id, col_feat, col_cible)
-                    detail[cle] = stats_conditionnelles(f_test, c_test)
+                    detail[cle] = stats_conditionnelles(
+                        f_test, c_test, timeframe=timeframe, expected_index=self.expected_index,
+                    )
+                    if self.tests_modalite:
+                        tests_dict[cle] = par_modalite_tests(
+                            f_test, c_test, nom_cible=col_cible,
+                            timeframe=timeframe, expected_index=self.expected_index,
+                        )
+
+                        if self.inference is not None:
+                            tests_dict[cle] = bootstrap_modalities(
+                                f_test, c_test, tests_dict[cle], self.inference, key=cle,
+                                horizon=parser_cible(col_cible)[1], timeframe=timeframe,
+                                expected_index=self.expected_index,
+                            )
+        if self.inference is not None:
+            correct_family(tests_dict, self.inference.confidence_level)
 
         self.resultats = pd.DataFrame(lignes)
         self._detail_conditionnel = detail
 
-        # Batterie de tests par modalité (fold 0 uniquement)
-        if self.tests_modalite and len(paires) > 0:
-            idx_test = paires[0][1]
-            tests_dict: dict = {}
-            for col_feat in features.columns:
-                for col_cible in cibles.columns:
-                    f_test = features.loc[idx_test, col_feat]
-                    c_test = cibles.loc[idx_test, col_cible]
-                    tests_dict[(col_feat, col_cible)] = par_modalite_tests(
-                        f_test, c_test, nom_cible=col_cible,
-                    )
-            self.resultats_tests = tests_dict
-        else:
-            self.resultats_tests = None
+        self.resultats_tests = tests_dict if self.tests_modalite else None
+        self.stabilite_modalites = stabilite_modalites(tests_dict, len(paires))
 
     # ------------------------------------------------------------------
     def save(self, output_dir: str | Path) -> None:
+        """Prépare tous les fichiers avant publication ; manifeste écrit en dernier."""
+        if self.resultats is None:
+            raise RuntimeError("Appeler run() avant save().")
+        output_dir = Path(output_dir)
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        current = manifest(self, origin="run" if self.metadata else "manual_evaluation")
+        if self.metadata is not None and current != self.metadata:
+            raise ValueError("L'étude a changé depuis run() : relancer run() avant save().")
+        metadata = self.metadata or current
+        managed = {
+            "study_results.parquet", "study_target_ends.parquet", "study_coverage.parquet",
+            "study_common_support.parquet", "study_tests_modalite.parquet",
+            "study_conditionnel.parquet", "study_stability.parquet", "study_report.md",
+            "study_inference.json", "study_metadata.json",
+        }
+        with TemporaryDirectory(dir=output_dir.parent, prefix=".study-export-") as temp:
+            staging = Path(temp)
+            self._write_export(staging)
+            report = staging / "study_report.md"
+            with report.open("a", encoding="utf-8") as stream:
+                stream.write("\n\n## Traçabilité\n\n")
+                stream.write(f"Mode : {metadata['analysis_mode']}.\n\n")
+                stream.write(metadata['validation_claim'] + "\n\n")
+                stream.write("Configuration, versions, périodes, exclusions et empreintes : `study_metadata.json`.\n")
+            metadata = {**metadata, "artifacts": {p.name: file_hash(p) for p in sorted(staging.iterdir())}}
+            (staging / "study_metadata.json").write_text(
+                json.dumps(metadata, indent=2, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for name in managed:
+                if (output_dir / name).resolve() in {self.regimes_path.resolve(), self.ohlcv_path.resolve()}:
+                    raise ValueError("Un export écraserait un fichier source.")
+            for name in sorted(managed - {"study_metadata.json"}):
+                source = staging / name
+                target = output_dir / name
+                if source.exists():
+                    os.replace(source, target)
+                elif target.is_file():
+                    target.unlink()
+            os.replace(staging / "study_metadata.json", output_dir / "study_metadata.json")
+        print(f"Étude exportée : {output_dir}")
+
+    def _write_export(self, output_dir: str | Path) -> None:
         """Exporte les résultats en parquet et le rapport en markdown."""
         if self.resultats is None:
             raise RuntimeError("Appeler run() avant save().")
@@ -264,8 +378,14 @@ class Study:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        if self.inference is not None:
+            (output_dir / "study_inference.json").write_text(
+                json.dumps(self.inference.to_dict(), indent=2), encoding="utf-8")
+
         parquet_path = output_dir / "study_results.parquet"
         self.resultats.to_parquet(parquet_path, index=False)
+        if self.df_fin_cibles is not None:
+            self.df_fin_cibles.to_parquet(output_dir / "study_target_ends.parquet")
         if self.couverture is not None:
             self.couverture.to_parquet(output_dir / "study_coverage.parquet", index=False)
         if self.support_commun is not None:
@@ -274,10 +394,12 @@ class Study:
         # Export séparé des tests par modalité (un parquet long)
         if self.resultats_tests:
             tests_longs = []
-            for (feat, cible), tab in self.resultats_tests.items():
+            for key, tab in self.resultats_tests.items():
+                fold, feat, cible = key if len(key) == 3 else (0, *key)
                 if tab.empty:
                     continue
                 t = tab.reset_index().copy()
+                t["fold"] = fold
                 t["feature"] = feat
                 t["cible"] = cible
                 t["modalite"] = t["modalite"].astype(str)
@@ -287,7 +409,21 @@ class Study:
                 pd.concat(tests_longs, ignore_index=True).to_parquet(
                     tests_path, index=False
                 )
-                print(f"Tests     : {tests_path}")
+
+
+        details = []
+        for (fold, feat, cible), tab in (self._detail_conditionnel or {}).items():
+            if tab.empty:
+                continue
+            table = tab.rename_axis("modalite").reset_index()
+            table["modalite"] = table["modalite"].astype(str)
+            table = table.assign(fold=fold, feature=feat, cible=cible)
+            details.append(table)
+        if details:
+            pd.concat(details, ignore_index=True).to_parquet(
+                output_dir / "study_conditionnel.parquet", index=False)
+        if self.stabilite_modalites is not None:
+            self.stabilite_modalites.to_parquet(output_dir / "study_stability.parquet", index=False)
 
         rapport_path = output_dir / "study_report.md"
         rapport = generer_rapport(
@@ -296,6 +432,7 @@ class Study:
             tests_modalite=self.resultats_tests,
             schema_split=self.schema_split,
             noms_cibles=self.noms_cibles,
+            stabilite=self.stabilite_modalites,
         )
         if self.couverture is not None:
             from regime_lib.study.report import _to_markdown
@@ -307,8 +444,7 @@ class Study:
                 rapport += "\n\nAucune estimation : support valide commun vide.\n"
         rapport_path.write_text(rapport, encoding="utf-8")
 
-        print(f"Résultats : {parquet_path}")
-        print(f"Rapport   : {rapport_path}")
+
 
     def detail_conditionnel(
         self,
@@ -328,6 +464,7 @@ class Study:
         self,
         feature: str,
         cible: str,
+        fold: int = 0,
     ) -> pd.DataFrame:
         """Renvoie les tests statistiques par modalité pour une paire."""
         if self.resultats_tests is None:
@@ -335,7 +472,7 @@ class Study:
                 "Tests de modalité non calculés. "
                 "Vérifier tests_modalite=True et appeler run()."
             )
-        cle = (feature, cible)
+        cle = (fold, feature, cible)
         if cle not in self.resultats_tests:
             raise KeyError(f"Aucun résultat pour {cle}.")
         return self.resultats_tests[cle]

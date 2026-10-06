@@ -265,11 +265,11 @@ def test_rejects_invalid_thresholds():
         ADXDetector(seuil_range=30.0, seuil_tendance=25.0)
 
     # seuil_range <= 0
-    with pytest.raises(ValueError, match="seuil_range < seuil_tendance"):
+    with pytest.raises(ValueError, match="seuil_range doit être > 0"):
         ADXDetector(seuil_range=-5.0, seuil_tendance=25.0)
 
     # seuil_tendance >= 100
-    with pytest.raises(ValueError, match="seuil_range < seuil_tendance"):
+    with pytest.raises(ValueError, match="seuil_tendance doit être < 100"):
         ADXDetector(seuil_range=20.0, seuil_tendance=105.0)
 
 

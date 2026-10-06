@@ -237,6 +237,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Liste les profils disponibles et quitte.",
     )
+    parser.add_argument("--show-config", action="store_true",
+                        help="Affiche paramètres effectifs, provenance et hash sans lire de données.")
     parser.add_argument("--allow-lookahead", type=_str2bool, default=False,
                         help="Autorise le lookahead globalement (défaut : false).")
     parser.add_argument("--allow-lookahead-override",
@@ -270,12 +272,44 @@ def build_parser() -> argparse.ArgumentParser:
 # ---------------------------------------------------------------------------
 # Exécution
 # ---------------------------------------------------------------------------
+def _build_detectors(args, profil, timeframe):
+    """Construit les instances une seule fois, avant toute lecture des données."""
+    unused = set(args.method_params) - set(args.methods)
+    if unused:
+        raise ValueError(f"Surcharges pour des méthodes inconnues ou non sélectionnées : {sorted(unused)}")
+    result = {}
+    for name in args.methods:
+        cls = METHOD_REGISTRY[name]
+        extra = cls.PARAM_SCHEMA.explicit_values(args.method_params.get(name, {}))
+        # Vérifier les clés avant l'appel Python pour un diagnostic avec chemin.
+        cls.PARAM_SCHEMA.validate_layer(extra, f"explicit.methodes.{name}")
+        result[name] = cls(
+            timeframe=timeframe,
+            profile=profil.for_method(name),
+            allow_lookahead=args.allow_lookahead_override.get(name, args.allow_lookahead),
+            **extra,
+        )
+    return result
+
+
+def _describe_detectors(detectors):
+    return {
+        name: {
+            "params": detector.params,
+            "sources": detector.param_sources,
+            "params_hash": hash_params(detector.params),
+        }
+        for name, detector in detectors.items()
+    }
+
+
 def _run_one_timeframe(
     df_raw,
     asset: str,
     timeframe: str,
     args: argparse.Namespace,
     profil,
+    detectors=None,
 ) -> tuple[list, list[str], int]:
     """
     Exécute toutes les méthodes pour un timeframe.
@@ -312,6 +346,7 @@ def _run_one_timeframe(
     frames: list = []
     methodes_avec_lookahead: list[str] = []
 
+    detectors = detectors if detectors is not None else _build_detectors(args, profil, timeframe)
     for method_name in args.methods:
         cls = METHOD_REGISTRY[method_name]
         allow = args.allow_lookahead_override.get(
@@ -321,18 +356,7 @@ def _run_one_timeframe(
         if allow and getattr(cls, "requires_lookahead", False):
             methodes_avec_lookahead.append(method_name)
 
-        # Surcharges CLI explicites (priorité maximale).
-        extra = dict(args.method_params.get(method_name, {}))
-
-        # Sous-profil extrait du profil global.
-        method_profile = profil.methodes.get(method_name, {})
-
-        detector = cls(
-            allow_lookahead=allow,
-            timeframe=timeframe,
-            profile=method_profile,
-            **extra,
-        )
+        detector = detectors[method_name]
 
         print(
             f"[run]   → {method_name} "
@@ -375,13 +399,14 @@ def run(args: argparse.Namespace) -> int:
     """
     # --- Validation des arguments requis --------------------------------
     manquants: list[str] = []
-    if not args.url:
+    show_config = getattr(args, "show_config", False)
+    if not args.url and not show_config:
         manquants.append("--url")
     if not args.timeframe:
         manquants.append("--timeframe")
     if not args.methods:
         manquants.append("--methods")
-    if not args.output:
+    if not args.output and not show_config:
         manquants.append("--output")
     if manquants:
         print(
@@ -404,6 +429,12 @@ def run(args: argparse.Namespace) -> int:
         f"[run] Profil '{profil.nom}' chargé (hash={hash_profil})",
         file=sys.stderr,
     )
+
+    detectors = {tf: _build_detectors(args, profil, tf) for tf in timeframes}
+    effective_config = {tf: _describe_detectors(items) for tf, items in detectors.items()}
+    if show_config:
+        print(json.dumps(effective_config, indent=2, ensure_ascii=False))
+        return 0
 
     # --- Chargement des données -----------------------------------------
     print(f"[run] Chargement de {args.url}", file=sys.stderr)
@@ -438,7 +469,7 @@ def run(args: argparse.Namespace) -> int:
 
     for tf in timeframes:
         frames, lookahead, n_rows = _run_one_timeframe(
-            df_raw, asset, tf, args, profil
+            df_raw, asset, tf, args, profil, detectors[tf]
         )
         all_frames.extend(frames)
         # On dédoublonne les méthodes avec lookahead (elles apparaissent
@@ -467,6 +498,7 @@ def run(args: argparse.Namespace) -> int:
             "allow_lookahead": args.allow_lookahead,
             "allow_lookahead_override": args.allow_lookahead_override,
             "method_params": args.method_params,
+            "effective_config": effective_config,
             "methodes_avec_lookahead": all_lookahead,
             "run_descriptif": bool(all_lookahead),
             # Contexte temporel

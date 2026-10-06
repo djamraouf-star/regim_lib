@@ -24,15 +24,17 @@ methodes:
   # Volatilité
   # ---------------------------------------------------------------------------
   atr_volatility:
+    n_atr: 14
+    fenetre: 500
+    min_periods: null  # automatique : fenetre // 2
     timeframes:
-      M1:  {n_atr: 20, fenetre: 30000, min_periods: 15000}
-      M5:  {n_atr: 20, fenetre: 6000,  min_periods: 3000}
-      M15: {n_atr: 14, fenetre: 2000,  min_periods: 1000}
-      M30: {n_atr: 14, fenetre: 1000,  min_periods: 500}
-      H1:  {n_atr: 14, fenetre: 500,   min_periods: 250}
-      H4:  {n_atr: 14, fenetre: 125,   min_periods: 62}
-      D1:  {n_atr: 14, fenetre: 21,    min_periods: 10}
-      W1:  {n_atr: 14, fenetre: 12,    min_periods: 6}
+      M1: {n_atr: 20, fenetre: 30000}
+      M5: {n_atr: 20, fenetre: 6000}
+      M15: {fenetre: 2000}
+      M30: {fenetre: 1000}
+      H4: {fenetre: 125}
+      D1: {fenetre: 21}
+      W1: {fenetre: 12}
     n_direction: 20
     q_low: 0.33
     q_high: 0.67
@@ -41,15 +43,17 @@ methodes:
   # Tendance
   # ---------------------------------------------------------------------------
   er_kaufman:
+    n_er: 20
+    fenetre: 700
+    min_periods: null  # automatique : fenetre // 2
     timeframes:
-      M1:  {n_er: 20, fenetre: 8000, min_periods: 4000}
-      M5:  {n_er: 20, fenetre: 3000, min_periods: 1500}
-      M15: {n_er: 20, fenetre: 2000, min_periods: 1000}
-      M30: {n_er: 20, fenetre: 1500, min_periods: 750}
-      H1:  {n_er: 20, fenetre: 700,  min_periods: 350}
-      H4:  {n_er: 20, fenetre: 200,  min_periods: 100}
-      D1:  {n_er: 20, fenetre: 40,   min_periods: 20}
-      W1:  {n_er: 20, fenetre: 20,   min_periods: 10}
+      M1: {fenetre: 8000}
+      M5: {fenetre: 3000}
+      M15: {fenetre: 2000}
+      M30: {fenetre: 1500}
+      H4: {fenetre: 200}
+      D1: {fenetre: 40}
+      W1: {fenetre: 20}
     q_chop: 0.40
     q_tendance: 0.60
 
@@ -75,25 +79,20 @@ methodes:
     n_atr_tol: 14
 
   mss_choch:
-    timeframes:
-      M1:  {n_fractale: 5}
-      M5:  {n_fractale: 5}
-      M15: {n_fractale: 5}
-      H1:  {n_fractale: 5}
-      H4:  {n_fractale: 5}
-      D1:  {n_fractale: 5}
+    n_fractale: 5
 
   # ---------------------------------------------------------------------------
   # Entropie
   # ---------------------------------------------------------------------------
   shannon:
+    fenetre: 100
+    n_bins: 10
     timeframes:
-      M1:  {fenetre: 200, n_bins: 10}
-      M5:  {fenetre: 200, n_bins: 10}
-      M15: {fenetre: 150, n_bins: 10}
-      H1:  {fenetre: 100, n_bins: 10}
-      H4:  {fenetre: 50,  n_bins: 10}
-      D1:  {fenetre: 30,  n_bins: 10}
+      M1: {fenetre: 200}
+      M5: {fenetre: 200}
+      M15: {fenetre: 150}
+      H4: {fenetre: 50}
+      D1: {fenetre: 30}
     seuil_ordonne: 0.65
     seuil_desordre: 0.78
 
@@ -101,13 +100,13 @@ methodes:
   # Vecteurs
   # ---------------------------------------------------------------------------
   pca_axis:
+    fenetre: 100
     timeframes:
-      M1:  {fenetre: 200}
-      M5:  {fenetre: 200}
+      M1: {fenetre: 200}
+      M5: {fenetre: 200}
       M15: {fenetre: 150}
-      H1:  {fenetre: 100}
-      H4:  {fenetre: 50}
-      D1:  {fenetre: 30}
+      H4: {fenetre: 50}
+      D1: {fenetre: 30}
     seuil_direction: 0.3
     seuil_eigen_ratio: 0.65
 
@@ -116,7 +115,7 @@ methodes:
   # ---------------------------------------------------------------------------
   minkowski_causal:
     fenetre_c: 500
-    min_periods_c: 250
+    min_periods_c: null  # automatique : fenetre_c // 2
     q_c: 0.90
     seuil_lightlike: 0.01
 
@@ -130,26 +129,29 @@ methodes:
   # Rappel : le volume Dukascopy est une mesure de profondeur observée,
   # pas un volume exécuté. Voir `doc/volume.md`.
   ofi:
+    fenetre: 20
     timeframes:
-      M1:  {fenetre: 20}
-      M5:  {fenetre: 20}
-      M15: {fenetre: 20}
-      M30: {fenetre: 20}
-      H1:  {fenetre: 20}
-      H4:  {fenetre: 20}
-      D1:  {fenetre: 10}
+      D1: {fenetre: 10}
     seuil_pression: 0.1
 
   divergence_pv:
+    fenetre_extreme: 20
+    fenetre_median_vol: 50
     timeframes:
-      M1:  {fenetre_extreme: 20, fenetre_median_vol: 50}
-      M5:  {fenetre_extreme: 20, fenetre_median_vol: 50}
-      M15: {fenetre_extreme: 20, fenetre_median_vol: 50}
-      M30: {fenetre_extreme: 20, fenetre_median_vol: 50}
-      H1:  {fenetre_extreme: 20, fenetre_median_vol: 50}
-      H4:  {fenetre_extreme: 20, fenetre_median_vol: 50}
-      D1:  {fenetre_extreme: 20, fenetre_median_vol: 30}
+      D1: {fenetre_median_vol: 30}
     ratio_volume_fort: 1.5
+
+  vpin:
+    bucket_volume: 10000.0
+    n_buckets: 50
+    seuil_bas: 0.20
+    seuil_haut: 0.40
+
+  volume_profile:
+    fenetre: 100
+    n_bins: 40
+    pct_bas: 0.20
+    pct_haut: 0.80
 
 # ---------------------------------------------------------------------------
 # Contexte temporel

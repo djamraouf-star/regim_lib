@@ -354,7 +354,7 @@ def test_rejects_invalid_seuils():
 
 
 def test_rejects_seuils_out_of_range():
-    with pytest.raises(ValueError, match="seuil_ordonne < seuil_desordre"):
+    with pytest.raises(ValueError, match="seuil_ordonne doit être > 0"):
         ShannonEntropyDetector(
             timeframe="H1", seuil_ordonne=0.0, seuil_desordre=0.5
         )

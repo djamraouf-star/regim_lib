@@ -59,7 +59,7 @@ def test_ic_trop_peu_de_points():
 def test_hit_rate_parfait():
     feature = pd.Series([1.0] * 50)
     cible = pd.Series([0.01] * 50)
-    res = hit_rate_directionnel(feature, cible)
+    res = hit_rate_directionnel(feature, cible, type_feature="directional", nom_cible="ret_fwd_1")
     assert res["hit_rate"] == 1.0
 
 

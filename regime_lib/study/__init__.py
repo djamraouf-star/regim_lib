@@ -30,6 +30,7 @@ from regime_lib.study.study import Study
 
 __all__ = [
     "Study",
+    "InferenceConfig",
     "calculer_cible",
     "extraire_features",
     "hit_rate_directionnel",
@@ -42,3 +43,5 @@ __all__ = [
     "split_walk_forward",
     "stats_conditionnelles",
 ]
+
+from regime_lib.study.inference import InferenceConfig

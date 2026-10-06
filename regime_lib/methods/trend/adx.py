@@ -20,7 +20,7 @@ ADX est causal par construction : aucun lookahead.
 
 Résolution des paramètres
 -------------------------
-Cascade : explicite > profile > fallback codé en dur.
+Résolveur commun : explicite > surcharges du profil > défauts YAML.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -119,11 +120,20 @@ class ADXDetector(RegimeDetector):
     }
     requires_lookahead = False
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "n_adx": Parameter(int, minimum=2),
+            "seuil_range": Parameter(float, minimum=0, maximum=100, exclusive_min=True, exclusive_max=True),
+            "seuil_tendance": Parameter(float, minimum=0, maximum=100, exclusive_min=True, exclusive_max=True),
+        },
+        constraints=(Ordered("seuil_range", "seuil_tendance"),),
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         n_adx: int | None = None,
         seuil_range: float | None = None,
         seuil_tendance: float | None = None,
@@ -136,20 +146,6 @@ class ADXDetector(RegimeDetector):
             seuil_range=seuil_range,
             seuil_tendance=seuil_tendance,
         )
-        self.n_adx = int(self._resolve("n_adx", n_adx, default=14))
-        self.seuil_range = float(self._resolve(
-            "seuil_range", seuil_range, default=20.0
-        ))
-        self.seuil_tendance = float(self._resolve(
-            "seuil_tendance", seuil_tendance, default=25.0
-        ))
-
-        if self.n_adx < 2:
-            raise ValueError("n_adx doit être >= 2.")
-        if not (0.0 < self.seuil_range < self.seuil_tendance < 100.0):
-            raise ValueError(
-                "Il faut 0 < seuil_range < seuil_tendance < 100."
-            )
 
     @staticmethod
     def _unaligned_mask(

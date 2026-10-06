@@ -12,6 +12,7 @@ authors = [{ name = "Djamal Raouf" }]
 dependencies = [
     "pandas>=2.0",
     "numpy>=1.24",
+    "scipy>=1.10",
     "pyarrow>=14.0",
     "hmmlearn>=0.3",
     "pyyaml>=6.0",
@@ -30,11 +31,14 @@ docs = [
 
 [project.scripts]
 regime-lib = "regime_lib.cli:main"
-regime-report = "regime_lib.utils.report:main"
+regime-report = "regime_lib.study.report:main"
 
 [tool.setuptools.packages.find]
 include = ["regime_lib*"]
 exclude = ["regime_lib.docs*", "tests*"]
+
+[tool.setuptools.package-data]
+regime_lib = ["config/profiles/*.yaml", "context/data/*.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

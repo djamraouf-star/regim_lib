@@ -19,6 +19,6 @@ Ce document liste les modules documentés automatiquement via Sphinx.
    regime_lib.study
    regime_lib.utils.validation
    regime_lib.utils.repro
-   regime_lib.utils.report
+   regime_lib.study.report
    regime_lib.cli
 ```

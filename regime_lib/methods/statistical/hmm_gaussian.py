@@ -16,7 +16,7 @@ Aucun label sémantique n'est imposé.
 
 Résolution des paramètres
 -------------------------
-Cascade : explicite > profile > fallback codé en dur.
+Résolveur commun : explicite > surcharges du profil > défauts YAML.
 `n_states` est résolu AVANT super().__init__() car il détermine
 la construction dynamique de REGIME_MAP.
 """
@@ -28,6 +28,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -134,77 +135,35 @@ class HMMGaussianDetector(RegimeDetector):
     REGIME_MAP: dict[str, int] = {}
     requires_lookahead = True
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "n_states": Parameter(int, minimum=1),
+            "n_iter": Parameter(int, minimum=1),
+            "seed": Parameter(int),
+        },
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         n_states: int | None = None,
         n_iter: int | None = None,
         seed: int | None = None,
     ) -> None:
-        # --- Résolution AVANT super() car REGIME_MAP en dépend --------
-        profile_dict = dict(profile) if profile else {}
-
-        def _resolve_pre(key, explicit, default):
-            if explicit is not None:
-                return explicit
-            if key in profile_dict:
-                return profile_dict[key]
-            return default
-
-        # --- n_states : int strict >= 1 (bool exclu) -------------------
-        raw_n_states = _resolve_pre("n_states", n_states, 2)
-        if isinstance(raw_n_states, bool) or not isinstance(raw_n_states, int):
-            raise ValueError(
-                f"n_states doit être un entier >= 1, "
-                f"reçu {raw_n_states!r} (type {type(raw_n_states).__name__})."
-            )
-        if raw_n_states < 1:
-            raise ValueError(
-                f"n_states doit être >= 1, reçu {raw_n_states}."
-            )
-        resolved_n_states = raw_n_states
-
-        # --- n_iter : int strict >= 1 (bool exclu) ---------------------
-        raw_n_iter = _resolve_pre("n_iter", n_iter, 100)
-        if isinstance(raw_n_iter, bool) or not isinstance(raw_n_iter, int):
-            raise ValueError(
-                f"n_iter doit être un entier >= 1, "
-                f"reçu {raw_n_iter!r} (type {type(raw_n_iter).__name__})."
-            )
-        if raw_n_iter < 1:
-            raise ValueError(
-                f"n_iter doit être >= 1, reçu {raw_n_iter}."
-            )
-        resolved_n_iter = raw_n_iter
-
-        # --- seed : int strict (peut être négatif) ---------------------
-        raw_seed = _resolve_pre("seed", seed, 42)
-        if isinstance(raw_seed, bool) or not isinstance(raw_seed, int):
-            raise ValueError(
-                f"seed doit être un entier, "
-                f"reçu {raw_seed!r} (type {type(raw_seed).__name__})."
-            )
-        resolved_seed = raw_seed
-
-        # --- Construction dynamique du REGIME_MAP ----------------------
-        self.REGIME_MAP = {
-            f"STATE_{i}": i for i in range(resolved_n_states)
-        }
-        self.REGIME_MAP["INCONNU"] = resolved_n_states
-
         super().__init__(
             allow_lookahead=allow_lookahead,
             timeframe=timeframe,
             profile=profile,
-            n_states=resolved_n_states,
-            n_iter=resolved_n_iter,
-            seed=resolved_seed,
+            n_states=n_states,
+            n_iter=n_iter,
+            seed=seed,
         )
-        self.n_states = resolved_n_states
-        self.n_iter = resolved_n_iter
-        self.seed = resolved_seed
+
+    def _configure_regime_map(self) -> None:
+        self.REGIME_MAP = {f"STATE_{i}": i for i in range(self.n_states)}
+        self.REGIME_MAP["INCONNU"] = self.n_states
 
     @staticmethod
     def _unaligned_mask(

@@ -46,6 +46,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 
@@ -86,11 +87,21 @@ class VpinDetector(RegimeDetector):
     requires_lookahead = False
     REQUIRES_COLUMNS = ["bid_volume", "ask_volume"]
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "bucket_volume": Parameter(float, minimum=0, exclusive_min=True),
+            "n_buckets": Parameter(int, minimum=2),
+            "seuil_bas": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "seuil_haut": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+        },
+        constraints=(Ordered("seuil_bas", "seuil_haut"),),
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         bucket_volume: float | None = None,
         n_buckets: int | None = None,
         seuil_bas: float | None = None,
@@ -105,29 +116,6 @@ class VpinDetector(RegimeDetector):
             seuil_bas=seuil_bas,
             seuil_haut=seuil_haut,
         )
-        self.bucket_volume = float(self._resolve(
-            "bucket_volume", bucket_volume, default=10_000.0,
-        ))
-        self.n_buckets = int(self._resolve(
-            "n_buckets", n_buckets, default=50,
-        ))
-        self.seuil_bas = float(self._resolve(
-            "seuil_bas", seuil_bas, default=0.20,
-        ))
-        self.seuil_haut = float(self._resolve(
-            "seuil_haut", seuil_haut, default=0.40,
-        ))
-
-        if self.bucket_volume <= 0:
-            raise ValueError("bucket_volume doit être > 0.")
-        if self.n_buckets < 2:
-            raise ValueError("n_buckets doit être >= 2.")
-        if not (0.0 < self.seuil_bas < 1.0):
-            raise ValueError("seuil_bas doit être dans (0, 1).")
-        if not (0.0 < self.seuil_haut < 1.0):
-            raise ValueError("seuil_haut doit être dans (0, 1).")
-        if self.seuil_haut <= self.seuil_bas:
-            raise ValueError("seuil_haut doit être > seuil_bas.")
 
     @staticmethod
     def _unaligned_mask(

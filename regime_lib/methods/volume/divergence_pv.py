@@ -51,6 +51,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -87,11 +88,19 @@ class DivergencePVDetector(RegimeDetector):
     requires_lookahead = False
     REQUIRES_COLUMNS = ["close", "volume"]
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "fenetre_extreme": Parameter(int, minimum=2, per_timeframe=True),
+            "fenetre_median_vol": Parameter(int, minimum=2, per_timeframe=True),
+            "ratio_volume_fort": Parameter(float, minimum=0, exclusive_min=True),
+        },
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         fenetre_extreme: int | None = None,
         fenetre_median_vol: int | None = None,
         ratio_volume_fort: float | None = None,
@@ -104,24 +113,6 @@ class DivergencePVDetector(RegimeDetector):
             fenetre_median_vol=fenetre_median_vol,
             ratio_volume_fort=ratio_volume_fort,
         )
-        self.fenetre_extreme = int(self._resolve(
-            "fenetre_extreme", fenetre_extreme, default=20,
-            per_timeframe=True,
-        ))
-        self.fenetre_median_vol = int(self._resolve(
-            "fenetre_median_vol", fenetre_median_vol, default=50,
-            per_timeframe=True,
-        ))
-        self.ratio_volume_fort = float(self._resolve(
-            "ratio_volume_fort", ratio_volume_fort, default=1.5
-        ))
-
-        if self.fenetre_extreme < 2:
-            raise ValueError("fenetre_extreme doit être >= 2.")
-        if self.fenetre_median_vol < 2:
-            raise ValueError("fenetre_median_vol doit être >= 2.")
-        if self.ratio_volume_fort <= 0:
-            raise ValueError("ratio_volume_fort doit être > 0.")
 
     @staticmethod
     def _unaligned_mask(

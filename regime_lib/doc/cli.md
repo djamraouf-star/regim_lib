@@ -2,7 +2,7 @@
 
 `regime_lib` fournit deux points d'entrée en ligne de commande :
 1. **`regime-lib`** (ou `python -m regime_lib`) : exécute le pipeline de chargement, calcul des régimes et export des résultats.
-2. **`regime-report`** (ou `python -m regime_lib.utils.report`) : génère un rapport statistique complet d'analyse d'un run.
+2. **`regime-report`** (ou `python -m regime_lib.study.report`) : génère un rapport statistique complet d'analyse d'un run.
 
 ---
 
@@ -88,7 +88,8 @@ propose pas actuellement ces paramètres.
 | `--timeframe` | Oui* | — | Timeframe(s) cible(s). Valeur unique (`H1`) ou liste séparée par des virgules (`M1,M5,M15,H1`). |
 | `--methods` | Oui* | — | Liste de méthodes séparées par des virgules, dont `atr_volatility`, `er_kaufman`, `adx`, `price_action`, `mss_choch` et `hmm_gaussian`. |
 | `--asset` | Non | Inféré | Symbole de l'actif. Si omis, il est déduit du nom de fichier (ex. `EURUSD_M1.parquet` $\to$ `EURUSD`). |
-| `--profile` | Non | `default` | Nom court d'un profil embarqué (`default`, `eurusd`, ...) ou chemin vers un fichier YAML. Le profil est fusionné avec `default.yaml`; les surcharges `--method-params` restent prioritaires. |
+| `--show-config` | Non | `false` | Affiche les valeurs effectives, leur provenance et leur hash, sans données ni export ; nécessite méthodes et timeframes. |
+| `--profile` | Non | `default` | Nom court d'un profil embarqué (`default`, `eurusd`, ...) ou chemin vers un fichier YAML. Le résolveur applique défauts et surcharges selon le [contrat de configuration](./config.md). |
 | `--list-profiles` | Non | `false` | Liste les profils embarqués disponibles puis quitte. Aucun argument de pipeline requis dans ce mode. |
 | `--allow-lookahead` | Non | `false` | Autorise globalement le lookahead pour toutes les méthodes. |
 | `--allow-lookahead-override` | Non | `{}` | Autorisation ciblée par méthode, ex. `hmm_gaussian:true,price_action:true,mss_choch:true`. |
@@ -103,7 +104,7 @@ propose pas actuellement ces paramètres.
 - un **nom court** résolu dans `regime_lib/config/profiles/`, ex. `--profile eurusd` ;
 - un **chemin YAML explicite**, ex. `--profile config/profils/gbpusd.yaml`.
 
-Tout profil autre que `default` est **fusionné profondément** avec `regime_lib/config/profiles/default.yaml` : il ne redéfinit que les valeurs qu'il change. Pendant le run, le profil chargé est tracé sur la sortie d'erreur avec son hash, puis exporté dans `run_meta.json` via les champs `profile_name`, `profile_type`, `profile_hash` et `profile_path`.
+Les paramètres de méthodes conservent séparément défauts et surcharges jusqu'à la résolution par timeframe. Les sections générales gardent leur fusion profonde. Voir [la configuration et sa migration](./config.md). Pendant le run, le profil chargé est tracé sur la sortie d'erreur avec son hash, puis exporté dans `run_meta.json` via les champs `profile_name`, `profile_type`, `profile_hash` et `profile_path`.
 
 Voir le [guide des profils](./config.md) pour le schéma YAML complet,
 l'ordre de priorité des paramètres et des exemples de profils personnalisés.
@@ -118,11 +119,15 @@ Dans le répertoire spécifié par `--output` :
 
 ## 2. Générateur de rapport : `regime-report`
 
+Ce rapport descriptif appartient au module `study` et conserve les labels
+des régimes de toutes les méthodes. Pour l'évaluation prédictive des
+features, voir le [module d'étude](./study.md).
+
 ### Exemples d'utilisation
 
 **Rapport sur un timeframe précis :**
 ```bash
-python -m regime_lib.utils.report \
+python -m regime_lib.study.report \
     --run-dir results_multi \
     --url "data/EURUSD_M1.parquet" \
     --method hmm_gaussian \
@@ -139,3 +144,9 @@ python -m regime_lib.utils.report \
 | `--method` | Non | Auto | Méthode à analyser (automatique si une seule méthode est présente dans le run). |
 | `--timeframe` | Non | Tous | Timeframe cible. Si omis et que le run en contient plusieurs, un rapport est produit pour chacun. |
 | `--output` | Non | stdout | Fichier texte de sortie (affiche sur la sortie standard par défaut). |
+
+Les rapports acceptent aussi `--asset` (sélection des régimes),
+`--configuration` (sélection du `params_hash`), `--ohlcv-asset` et
+`--ohlcv-timeframe` (identité explicite des prix source).
+Les incompatibilités d'identité et les configurations ambiguës sont refusées.
+Voir les [contrôles communs des entrées](./study.md#73-contrôles-communs-des-entrées).

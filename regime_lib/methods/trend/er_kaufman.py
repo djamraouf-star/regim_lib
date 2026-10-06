@@ -26,7 +26,7 @@ Régimes produits
 
 Résolution des paramètres
 -------------------------
-Cascade : explicite > profile (avec timeframes) > fallback codé en dur.
+Résolveur commun : explicite > surcharges du profil > défauts YAML.
 
 Causalité et anti-lookahead
 ---------------------------
@@ -43,6 +43,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
@@ -66,20 +67,22 @@ class ERKaufmanDetector(RegimeDetector):
     }
     requires_lookahead = False
 
-    N_ER: dict[str, int] = {
-        "M1": 20, "M5": 20, "M15": 20, "M30": 20,
-        "H1": 20, "H4": 20, "D1": 20, "W1": 20,
-    }
-    FENETRE_QUANTILE: dict[str, int] = {
-        "M1": 8000, "M5": 3000, "M15": 2000, "M30": 1500,
-        "H1": 700, "H4": 200, "D1": 40, "W1": 20,
-    }
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "q_chop": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "q_tendance": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "n_er": Parameter(int, minimum=1, per_timeframe=True),
+            "fenetre": Parameter(int, minimum=2, per_timeframe=True),
+            "min_periods": Parameter(int, minimum=1, per_timeframe=True, half_window="fenetre"),
+        },
+        constraints=(Ordered("q_chop", "q_tendance"), Ordered("min_periods", "fenetre", equal=True),),
+    )
 
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         q_chop: float | None = None,
         q_tendance: float | None = None,
         n_er: int | None = None,
@@ -96,45 +99,6 @@ class ERKaufmanDetector(RegimeDetector):
             fenetre=fenetre,
             min_periods=min_periods,
         )
-
-        self.q_chop = float(self._resolve(
-            "q_chop", q_chop, default=0.40
-        ))
-        self.q_tendance = float(self._resolve(
-            "q_tendance", q_tendance, default=0.60
-        ))
-        self.n_er = int(self._resolve(
-            "n_er", n_er,
-            default=self.N_ER.get(timeframe or "", 20),
-            per_timeframe=True,
-        ))
-        self.fenetre = int(self._resolve(
-            "fenetre", fenetre,
-            default=self.FENETRE_QUANTILE.get(timeframe or "", 700),
-            per_timeframe=True,
-        ))
-
-        resolved_min = self._resolve(
-            "min_periods", min_periods, default=None, per_timeframe=True,
-        )
-        if resolved_min is not None:
-            self.min_periods = int(resolved_min)
-        else:
-            self.min_periods = max(1, self.fenetre // 2)
-
-        if self.n_er < 1:
-            raise ValueError("n_er doit être >= 1.")
-        if self.fenetre < 2:
-            raise ValueError("fenetre doit être >= 2.")
-        if not (0.0 < self.q_chop < self.q_tendance < 1.0):
-            raise ValueError("Il faut 0 < q_chop < q_tendance < 1.")
-        if self.min_periods < 1:
-            raise ValueError("min_periods doit être >= 1.")
-        if self.min_periods > self.fenetre:
-            raise ValueError(
-                "min_periods doit être <= fenetre "
-                f"(reçu min_periods={self.min_periods}, fenetre={self.fenetre})."
-            )
 
     # ------------------------------------------------------------------
     # Helpers

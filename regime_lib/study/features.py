@@ -20,9 +20,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
-from regime_lib.utils.validation import validate_time_index, validity_mask
-
-SERIES_FIELDS = ("asset", "timeframe", "source", "price_side", "adjustment", "calendar")
+from regime_lib.study.validation import prepare_regimes, series_identity
 
 
 FEATURES_CATEGORIELLES = {
@@ -152,40 +150,23 @@ def extraire_features(
     df = df[df["method"].isin(methodes)]
     if df.empty:
         raise ValueError("Aucune méthode retenue après filtrage.")
-    identity = {}
-    for field in SERIES_FIELDS:
-        if field in df:
-            if df[field].isna().any() or df[field].nunique() != 1:
-                raise ValueError(f"Identité ambiguë ({field}) : sélectionner une série unique.")
-            identity[field] = df[field].iloc[0]
-
     # Pivot : index = timestamp, colonnes = (method, feature) → nom
     # combiné. Une seule méthode par ligne à l'origine, on pivote
     # pour avoir une colonne par (methode, feature).
     pieces = []
     exclusions = {}
+    identities = []
     for methode in methodes:
         sub = df[df["method"] == methode].copy()
-        if configurations and methode in configurations:
-            if "params_hash" not in sub:
-                raise ValueError("params_hash absent pour la sélection de configuration.")
-            sub = sub[sub["params_hash"].eq(configurations[methode])]
-        if sub.empty:
-            raise ValueError(f"Méthode/configuration absente : {methode}.")
-        if "params_hash" in sub and (sub["params_hash"].isna().any() or
-                                    sub["params_hash"].nunique() != 1):
-            raise ValueError(f"Configurations ambiguës pour {methode} : sélectionner params_hash.")
-        sub = sub.set_index("timestamp").sort_index()
-        validate_time_index(sub.index)
-        valid = validity_mask(sub)
-        exclusions[methode] = {
-            "n_partiel": int(sub["is_partial"].fillna(True).sum()) if "is_partial" in sub else 0,
-            "n_chauffe": int(sub["is_warmup"].fillna(True).sum()) if "is_warmup" in sub else 0,
-            "n_inconnu": int(sub["regime"].eq("INCONNU").sum()) if "regime" in sub else 0,
-            "n_absent": int(sub["regime"].isna().sum()) if "regime" in sub else 0,
-        }
+        sub, valid = prepare_regimes(
+            sub, (configurations or {}).get(methode),
+        )
+        exclusions[methode] = sub.attrs["exclusions"]
+        identities.append(sub.attrs["series_identity"])
         sub = sub[features].copy()
         for col in features:
+            if pd.api.types.is_bool_dtype(sub[col]):
+                sub[col] = sub[col].astype("boolean")
             if pd.api.types.is_numeric_dtype(sub[col]):
                 sub[col] = sub[col].where(np.isfinite(sub[col]))
             sub[col] = sub[col].where(valid)
@@ -197,6 +178,6 @@ def extraire_features(
 
     out = pd.concat(pieces, axis=1)
     out = out.sort_index()
-    out.attrs["series_identity"] = identity
+    out.attrs["series_identity"] = series_identity(pd.DataFrame(identities))
     out.attrs["exclusions"] = exclusions
     return out

@@ -17,13 +17,14 @@ Ce guide détaille les étapes pour implémenter et intégrer une nouvelle méth
    - `REGIME_MAP: ClassVar[dict[str, int]]` : dictionnaire stable et bijectif associant chaque libellé de régime à un identifiant entier (ex. `{"CALME": 0, "AGITE": 1, "INCONNU": 2}`) ;
    - `requires_lookahead: ClassVar[bool]` : `True` si la méthode a besoin structurellement du futur, sinon `False`.
 4. **Décorer la classe** avec `@register_method` (importé de `regime_lib.core.registry`).
-5. **Implémenter `__init__`** :
-   - Transmettre `allow_lookahead`, `timeframe` et les hyperparamètres à `super().__init__(...)` pour qu'ils soient inclus dans le calcul de `params_hash`.
-6. **Implémenter `fit_predict(df) -> pd.DataFrame`** :
+5. **Déclarer `PARAM_SCHEMA`** avec `ParameterSchema` et `Parameter` (types, bornes, portée par timeframe et contraintes `Ordered`). Ajouter toutes les valeurs par défaut sous `methodes.<name>` dans [le YAML de référence](../config/profiles/default.yaml). Les clés autorisées proviennent du schéma.
+6. **Implémenter `__init__`** :
+   - Transmettre `allow_lookahead`, `timeframe`, `profile` et les hyperparamètres à `super().__init__(...)` pour qu'ils soient inclus dans le calcul de `params_hash`.
+7. **Implémenter `fit_predict(df) -> pd.DataFrame`** :
    - Entrée : DataFrame OHLCV avec index `DatetimeIndex` nommé `timestamp` croissant sans doublons.
    - Sortie : DataFrame avec colonnes `["regime", "confidence"]`. Le formatage uniforme complet (colonnes `timeframe`, `asset`, `params_hash`, etc.) est assuré par `to_uniform` dans le pipeline.
-7. **Exposer la méthode** dans le `__init__.py` de la sous-famille et dans `regime_lib/methods/__init__.py`.
-8. **Ajouter la suite de tests unitaires** dans `tests/test_<nom>.py`.
+8. **Exposer la méthode** dans le `__init__.py` de la sous-famille et dans `regime_lib/methods/__init__.py`.
+9. **Ajouter la suite de tests unitaires** dans `tests/test_<nom>.py`.
 
 ---
 
@@ -36,6 +37,7 @@ from typing import ClassVar
 import pandas as pd
 import numpy as np
 
+from regime_lib.config.parameters import Parameter, ParameterSchema
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 
@@ -51,19 +53,21 @@ class MaNouvelleMethode(RegimeDetector):
         "INCONNU": 2,
     }
     requires_lookahead: ClassVar[bool] = False
+    PARAM_SCHEMA = ParameterSchema({"seuil": Parameter(float, minimum=0, maximum=1)})
 
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        seuil: float = 0.5,
+        profile=None,
+        seuil: float | None = None,
     ) -> None:
         super().__init__(
             allow_lookahead=allow_lookahead,
             timeframe=timeframe,
+            profile=profile,
             seuil=seuil,
         )
-        self.seuil = float(seuil)
 
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
@@ -92,6 +96,17 @@ class MaNouvelleMethode(RegimeDetector):
 ```
 
 ---
+
+Pour ce squelette, ajouter au YAML de référence :
+
+```yaml
+methodes:
+  ma_methode:
+    seuil: 0.5
+```
+
+Le constructeur ne recopie ni les défauts ni la validation du schéma.
+La base affecte les attributs résolus, `params` et `param_sources`.
 
 ## 3. Bonnes pratiques de conception
 

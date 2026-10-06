@@ -49,7 +49,7 @@ scipy pour des inégalités strictes, avec exclusion explicite des bords
 
 Résolution des paramètres
 -------------------------
-Cascade : explicite > profile (avec timeframes) > fallback codé en dur.
+Résolveur commun : explicite > surcharges du profil > défauts YAML.
 """
 
 from __future__ import annotations
@@ -59,6 +59,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method   # ← IMPORT CRITIQUE
 from regime_lib.core.utils import (
@@ -213,16 +214,19 @@ class PriceActionDetector(RegimeDetector):
     }
     requires_lookahead = True
 
-    N_FRACTALE: dict[str, int] = {
-        "M1": 5, "M5": 5, "M15": 5, "M30": 5,
-        "H1": 5, "H4": 5, "D1": 5, "W1": 5,
-    }
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "n_fractale": Parameter(int, minimum=1, per_timeframe=True),
+            "k_atr": Parameter(float, minimum=0, exclusive_min=True),
+            "n_atr_tol": Parameter(int, minimum=1),
+        },
+    )
 
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         n_fractale: int | None = None,
         k_atr: float | None = None,
         n_atr_tol: int | None = None,
@@ -235,24 +239,6 @@ class PriceActionDetector(RegimeDetector):
             k_atr=k_atr,
             n_atr_tol=n_atr_tol,
         )
-        self.n_fractale = int(self._resolve(
-            "n_fractale", n_fractale,
-            default=self.N_FRACTALE.get(timeframe or "", 5),
-            per_timeframe=True,
-        ))
-        self.k_atr = float(self._resolve(
-            "k_atr", k_atr, default=0.5
-        ))
-        self.n_atr_tol = int(self._resolve(
-            "n_atr_tol", n_atr_tol, default=14
-        ))
-
-        if self.n_fractale < 1:
-            raise ValueError("n_fractale doit être >= 1.")
-        if self.k_atr <= 0:
-            raise ValueError("k_atr doit être > 0.")
-        if self.n_atr_tol < 1:
-            raise ValueError("n_atr_tol doit être >= 1.")
 
     @staticmethod
     def _unaligned_mask(

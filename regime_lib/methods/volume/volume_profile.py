@@ -45,6 +45,7 @@ from regime_lib.utils.validation import validated_detector
 import numpy as np
 import pandas as pd
 
+from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSchema, Ordered
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 
@@ -84,11 +85,21 @@ class VolumeProfileDetector(RegimeDetector):
     requires_lookahead = False
     REQUIRES_COLUMNS = ["high", "low", "close", "volume"]
 
+    PARAM_SCHEMA = ParameterSchema(
+        parameters={
+            "fenetre": Parameter(int, minimum=2, per_timeframe=True),
+            "n_bins": Parameter(int, minimum=2),
+            "pct_bas": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            "pct_haut": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+        },
+        constraints=(Ordered("pct_bas", "pct_haut"),),
+    )
+
     def __init__(
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         fenetre: int | None = None,
         n_bins: int | None = None,
         pct_bas: float | None = None,
@@ -103,29 +114,6 @@ class VolumeProfileDetector(RegimeDetector):
             pct_bas=pct_bas,
             pct_haut=pct_haut,
         )
-        self.fenetre = int(self._resolve(
-            "fenetre", fenetre, default=100, per_timeframe=True,
-        ))
-        self.n_bins = int(self._resolve(
-            "n_bins", n_bins, default=40,
-        ))
-        self.pct_bas = float(self._resolve(
-            "pct_bas", pct_bas, default=0.20,
-        ))
-        self.pct_haut = float(self._resolve(
-            "pct_haut", pct_haut, default=0.80,
-        ))
-
-        if self.fenetre < 2:
-            raise ValueError("fenetre doit être >= 2.")
-        if self.n_bins < 2:
-            raise ValueError("n_bins doit être >= 2.")
-        if not (0.0 < self.pct_bas < 1.0):
-            raise ValueError("pct_bas doit être dans (0, 1).")
-        if not (0.0 < self.pct_haut < 1.0):
-            raise ValueError("pct_haut doit être dans (0, 1).")
-        if self.pct_haut <= self.pct_bas:
-            raise ValueError("pct_haut doit être > pct_bas.")
 
     @staticmethod
     def _unaligned_mask(

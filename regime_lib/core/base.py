@@ -12,21 +12,10 @@ Le DataFrame retourné doit respecter le format uniforme décrit dans
 
 Résolution des paramètres
 -------------------------
-Chaque méthode résout ses paramètres par cascade de priorité :
-
-    1. Argument explicite au constructeur
-    2. Sous-profil passé via `profile=...`
-    3. `default.yaml` (source de vérité du projet)
-    4. Valeur codée en dur dans la méthode (filet de sécurité ultime)
-
-Les niveaux 3 et 4 sont volontairement séparés : `default.yaml` est la
-**source de vérité** que les utilisateurs modifient pour changer le
-comportement par défaut. Les valeurs codées en dur dans les méthodes ne
-sont consultées que si le YAML est indisponible ou corrompu. En
-pratique, elles ne sont jamais utilisées dans un environnement sain.
-
-Cette cascade évite la duplication : modifier `default.yaml` suffit,
-sans avoir à synchroniser manuellement chaque méthode.
+Le schéma PARAM_SCHEMA déclare types et contraintes. Le résolveur commun
+applique les défauts YAML, le profil, puis les arguments explicites. Aucune
+valeur par défaut n'est définie dans les détecteurs. ``params`` contient les
+valeurs effectives et ``param_sources`` leur provenance.
 
 Colonnes requises
 -----------------
@@ -40,31 +29,11 @@ requiert `bid_volume` et `ask_volume`).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from functools import lru_cache
 from typing import ClassVar
 
 import pandas as pd
 
-
-@lru_cache(maxsize=1)
-def _load_default_profile():
-    """
-    Charge le profil `default.yaml` une seule fois (cache mémoire).
-
-    Utilisé comme fallback dans `_resolve` : si aucun profil n'est
-    fourni et que l'argument explicite est absent, on lit la valeur
-    depuis le YAML. Le fallback codé en dur dans chaque méthode devient
-    un ultime filet de sécurité (si le YAML est indisponible).
-
-    Import différé pour éviter un cycle `core ↔ config`.
-    Retourne None si le chargement échoue — la cascade continuera alors
-    vers le fallback codé en dur.
-    """
-    try:
-        from regime_lib.config import load_profile
-        return load_profile("default")
-    except Exception:
-        return None
+from regime_lib.config.parameters import MethodProfile, ParameterSchema, resolve_parameters
 
 
 class RegimeDetector(ABC):
@@ -101,15 +70,14 @@ class RegimeDetector(ABC):
     timeframe : str | None
         Timeframe courant (ex. "H1"). Utilisé par certaines méthodes
         pour résoudre leurs paramètres par timeframe.
-    profile : dict
-        Sous-profil de cette méthode (issu du profil global). Vide si
-        aucun profil n'est fourni.
+    profile : dict | MethodProfile | None
+        Surcharges brutes ou instantané de cette méthode. None si absent.
     params : dict
-        Trace des paramètres effectivement passés au constructeur
-        (hors allow_lookahead, timeframe, profile). Utilisé pour la
-        reproductibilité (`params_hash`).
+        Paramètres résolus et validés, plus le timeframe si fourni.
+        Utilisés pour la reproductibilité (`params_hash`).
     """
 
+    PARAM_SCHEMA: ClassVar[ParameterSchema | None] = None
     name: ClassVar[str] = "base"
     REGIME_MAP: ClassVar[dict[str, int]] = {}
     requires_lookahead: ClassVar[bool] = False
@@ -119,9 +87,28 @@ class RegimeDetector(ABC):
         self,
         allow_lookahead: bool = False,
         timeframe: str | None = None,
-        profile: dict | None = None,
+        profile: dict | MethodProfile | None = None,
         **params,
     ) -> None:
+        self.allow_lookahead = allow_lookahead
+        self.timeframe = timeframe
+        self.profile = profile
+        if self.PARAM_SCHEMA is not None:
+            resolved = resolve_parameters(
+                self.name, self.PARAM_SCHEMA, timeframe, profile, params,
+            )
+            self.params = resolved.values
+            self.param_sources = resolved.sources
+            for key, value in self.params.items():
+                setattr(self, key, value)
+        else:
+            # Sous-classes sans paramètres déclarés (contrat de base).
+            self.params = dict(params)
+            self.param_sources = {key: "explicit" for key in params}
+        if timeframe is not None:
+            self.params["timeframe"] = timeframe
+        self._configure_regime_map()
+
         # --- Validation de REGIME_MAP -----------------------------------
         if not self.REGIME_MAP:
             raise ValueError(
@@ -164,9 +151,9 @@ class RegimeDetector(ABC):
             )
 
         # --- Validation du profil ---------------------------------------
-        if profile is not None and not isinstance(profile, dict):
+        if profile is not None and not isinstance(profile, (dict, MethodProfile)):
             raise TypeError(
-                f"{type(self).__name__} : profile doit être un dict ou None, "
+                f"{type(self).__name__} : profile doit être un dict, un MethodProfile ou None, "
                 f"reçu {type(profile).__name__}."
             )
 
@@ -186,82 +173,8 @@ class RegimeDetector(ABC):
                 f"REQUIRES_COLUMNS doivent être des str. Invalides : {bad!r}."
             )
 
-        self.allow_lookahead: bool = allow_lookahead
-        self.timeframe: str | None = timeframe
-        self.profile: dict = dict(profile) if profile else {}
-        self.params: dict = dict(params)
-        # On mémorise le timeframe dans params pour qu'il entre dans le hash.
-        if timeframe is not None:
-            self.params.setdefault("timeframe", timeframe)
-
-    # ------------------------------------------------------------------
-    # Helpers de résolution de paramètres (à utiliser dans les sous-classes)
-    # ------------------------------------------------------------------
-    def _resolve(
-        self,
-        key: str,
-        explicit: object,
-        default: object,
-        per_timeframe: bool = False,
-    ) -> object:
-        """
-        Résout un paramètre par cascade :
-
-            explicite
-            > sous-profil (avec timeframes si applicable)
-            > default.yaml (source de vérité)
-            > valeur codée en dur (filet de sécurité ultime)
-
-        Parameters
-        ----------
-        key : str
-            Nom du paramètre (clé dans le sous-profil / le YAML).
-        explicit : object
-            Valeur passée explicitement au constructeur. `None` signifie
-            "non fourni".
-        default : object
-            Fallback ultime si ni le profil passé, ni `default.yaml` ne
-            définissent la clé. Devrait être rarement utilisé.
-        per_timeframe : bool
-            Si True, cherche la clé dans
-            `profile['timeframes'][timeframe]` puis dans
-            `default.yaml → methodes.<name>.timeframes.<timeframe>`.
-
-        Returns
-        -------
-        object
-            La valeur résolue (peut être None si `default` est None et
-            que rien n'est trouvé, à la sous-classe de gérer).
-        """
-        # --- 1. Explicite ----------------------------------------------
-        if explicit is not None:
-            return explicit
-
-        # --- 2. Sous-profil passé à l'instance --------------------------
-        if per_timeframe and self.timeframe is not None:
-            tf_params = self.profile.get("timeframes", {}).get(
-                self.timeframe, {}
-            )
-            if key in tf_params:
-                return tf_params[key]
-        if key in self.profile:
-            return self.profile[key]
-
-        # --- 3. default.yaml (source de vérité) -------------------------
-        profil_def = _load_default_profile()
-        if profil_def is not None:
-            method_cfg = profil_def.methodes.get(self.name, {})
-            if per_timeframe and self.timeframe is not None:
-                tf_cfg = method_cfg.get("timeframes", {}).get(
-                    self.timeframe, {}
-                )
-                if key in tf_cfg:
-                    return tf_cfg[key]
-            if key in method_cfg:
-                return method_cfg[key]
-
-        # --- 4. Filet de sécurité ultime --------------------------------
-        return default
+    def _configure_regime_map(self) -> None:
+        """Hook après résolution, pour les labels dépendant des paramètres."""
 
     # ------------------------------------------------------------------
     # Vérification des colonnes requises
@@ -324,6 +237,6 @@ class RegimeDetector(ABC):
             f"{type(self).__name__}(name={self.name!r}, "
             f"timeframe={self.timeframe!r}, "
             f"allow_lookahead={self.allow_lookahead}, "
-            f"profile_keys={list(self.profile.keys())}, "
+            f"profile={self.profile!r}, "
             f"params={self.params!r})"
         )

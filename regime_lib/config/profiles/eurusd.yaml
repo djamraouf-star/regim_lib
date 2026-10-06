@@ -1,40 +1,17 @@
-# regime_lib/config/profiles/eurusd.yaml
+# Surcharges EURUSD uniquement ; les autres valeurs viennent de default.yaml.
 nom: eurusd
 type: forex_majeur
 description: "EURUSD, calibration 2025-2026 sur M1"
 
-donnees:
-  source: barres
-  timeframes: [M1, M5, M15, H1]
-
 methodes:
-  atr_volatility:
-    timeframes:
-      M1:  {n_atr: 20, fenetre: 30000, min_periods: 15000}
-      M5:  {n_atr: 20, fenetre: 6000,  min_periods: 3000}
-      M15: {n_atr: 14, fenetre: 2000,  min_periods: 1000}
-      H1:  {n_atr: 14, fenetre: 500,   min_periods: 250}
-
-  er_kaufman:
-    timeframes:
-      H1: {n_er: 20, fenetre: 700, min_periods: 350}
-
   adx:
-    n_adx: 14
     seuil_range: 22.0
     seuil_tendance: 28.0
-
-  hmm_gaussian:
-    n_states: 2
-    n_iter: 100
-    seed: 42
-
   shannon:
+    # Surcharge générale prioritaire sur les fenêtres par timeframe des défauts.
     fenetre: 100
     seuil_ordonne: 0.3
     seuil_desordre: 0.7
 
 segmentation:
-  modele: normal
   pen: 3.0
-  min_size: 20
