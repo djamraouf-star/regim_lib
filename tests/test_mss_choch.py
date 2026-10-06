@@ -330,7 +330,7 @@ def test_classify_mss_choch_basic():
     pivots = _build_alternating_pivots(is_sommet, is_creux, high, low)
     # Ajouter manuellement des pivots pour tester la classification
     # Structure simple : on vérifie juste que la fonction retourne un array
-    regime = _classify_mss_choch(pivots, high, low, close, len(high))
+    regime = _classify_mss_choch(pivots, close, len(high))
     assert len(regime) == len(high)
 
 

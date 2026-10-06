@@ -58,6 +58,9 @@ class ERKaufmanDetector(RegimeDetector):
     """Détecteur de régimes par Efficiency Ratio de Kaufman."""
 
     name = "er_kaufman"
+    availability = 'bar_close'
+    regime_dimension = 'efficiency'
+    regime_description = 'Efficience du trajet selon le ratio de Kaufman.'
     REGIME_MAP = {
         "TENDANCE_HAUSSIERE": 0,
         "TENDANCE_BAISSIERE": 1,

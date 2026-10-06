@@ -6,7 +6,7 @@ Définition
 Sur une fenêtre glissante de `fenetre` barres, on construit un
 histogramme du volume par niveau de prix (bins réguliers entre le low
 minimum et le high maximum de la fenêtre). La **zone de valeur** est
-l’intervalle [P20, P80] contenant 80 % du volume total.
+l’intervalle [P20, P80] délimitée par les quantiles 20 % et 80 % du volume.
 
 Régimes produits
 ----------------
@@ -23,7 +23,7 @@ Mesures exposées
 
 Causalité
 ---------
-Fenêtre strictement passée. Aucun lookahead.
+Fenêtre incluant la barre courante clôturée. Aucun lookahead.
 
 Données requises
 ----------------
@@ -50,10 +50,7 @@ from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 
 
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
-    "H1": 3600, "H4": 14400, "D1": 86400, "W1": 604800,
-}
+from regime_lib.core.temporal import unaligned_mask
 
 
 @register_method
@@ -76,6 +73,9 @@ class VolumeProfileDetector(RegimeDetector):
     """
 
     name = "volume_profile"
+    availability = 'bar_close'
+    regime_dimension = 'value_area'
+    regime_description = 'Position dans un histogramme glissant de volume approximé à partir des barres.'
     REGIME_MAP = {
         "HORS_ZONE_BASSE": 0,
         "DANS_ZONE_VALEUR": 1,
@@ -115,21 +115,8 @@ class VolumeProfileDetector(RegimeDetector):
             pct_haut=pct_haut,
         )
 
-    @staticmethod
-    def _unaligned_mask(
-        index: pd.DatetimeIndex, timeframe: str | None
-    ) -> np.ndarray:
-        step = _TIMEFRAME_SECONDS.get(timeframe or "")
-        if step is None or len(index) == 0:
-            return np.zeros(len(index), dtype=bool)
-        if index.tz is not None:
-            epoch = pd.Timestamp("1970-01-01", tz="UTC")
-        else:
-            epoch = pd.Timestamp("1970-01-01")
-        ts_s = np.asarray(
-            (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-        )
-        return (ts_s % step) != 0
+    _unaligned_mask = staticmethod(unaligned_mask)
+
 
     # ------------------------------------------------------------------
     # Calcul de la zone de valeur sur une fenêtre

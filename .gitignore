@@ -12,3 +12,8 @@ __pycache__/
 /actifs/**/*.parquet
 /analyses/**/output/
 /erreur.log
+
+# Vérification locale des distributions
+/.audit-build/
+/build/
+/dist/

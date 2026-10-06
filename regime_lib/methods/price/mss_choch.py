@@ -53,7 +53,6 @@ from regime_lib.config.parameters import MethodProfile, Parameter, ParameterSche
 from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 from regime_lib.core.utils import (
-    TIMEFRAME_SECONDS as _TIMEFRAME_SECONDS,
     detect_fractals as _detect_fractals,
     build_alternating_pivots as _build_alternating_pivots,
     unaligned_mask,
@@ -62,8 +61,6 @@ from regime_lib.core.utils import (
 
 def _classify_mss_choch(
     pivots: list[tuple[int, str, float]],
-    high: np.ndarray,
-    low: np.ndarray,
     close: np.ndarray,
     n: int,
 ) -> np.ndarray:
@@ -88,9 +85,6 @@ def _classify_mss_choch(
        e. Sinon NEUTRE
     """
     regime = np.full(n, "INCONNU", dtype=object)
-
-    # Index des pivots par ordre d'apparition (croissant)
-    pivot_indices = [p[0] for p in pivots]
 
     # Pointeur courant dans les pivots (avance au fil du temps)
     j = 0  # prochain pivot pas encore disponible à t
@@ -153,6 +147,9 @@ class MSSCHOCHDetector(RegimeDetector):
     """
 
     name = "mss_choch"
+    availability = 'retrospective'
+    regime_dimension = 'breakout_event'
+    regime_description = 'Classification simplifiée des cassures sur pivots rétrospectifs.'
     REGIME_MAP = {
         "MSS_HAUSSIER": 0,
         "MSS_BAISSIER": 1,
@@ -211,7 +208,7 @@ class MSSCHOCHDetector(RegimeDetector):
         pivots = _build_alternating_pivots(is_sommet, is_creux, high, low)
 
         # 2) Classification
-        regime = _classify_mss_choch(pivots, high, low, close, n)
+        regime = _classify_mss_choch(pivots, close, n)
 
         # 3) Confidence : plus élevée pour MSS (confirmé) que CHOCH
         confidence = np.full(n, 0.0, dtype=float)

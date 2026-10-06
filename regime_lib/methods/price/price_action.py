@@ -205,6 +205,9 @@ class PriceActionDetector(RegimeDetector):
     """
 
     name = "price_action"
+    availability = 'retrospective'
+    regime_dimension = 'price_structure'
+    regime_description = 'Structure rétrospective des pivots, révisable.'
     REGIME_MAP = {
         "TENDANCE_HAUSSIERE": 0,
         "TENDANCE_BAISSIERE": 1,

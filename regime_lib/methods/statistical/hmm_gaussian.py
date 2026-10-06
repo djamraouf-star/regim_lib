@@ -132,6 +132,9 @@ class HMMGaussianDetector(RegimeDetector):
     """
 
     name = "hmm_gaussian"
+    availability = 'retrospective'
+    regime_dimension = 'latent_state'
+    regime_description = 'État latent appris et décodé sur la série entière ; identifiants propres au fit.'
     REGIME_MAP: dict[str, int] = {}
     requires_lookahead = True
 

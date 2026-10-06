@@ -118,5 +118,6 @@ def validated_detector(method):
                 else:
                     result[col] = data[col]
         result.attrs.update(data.attrs)
+        result.attrs.update(self.interpretation())
         return result
     return wrapped

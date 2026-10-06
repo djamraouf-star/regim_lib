@@ -138,3 +138,28 @@ ambiguïtés d'identité, les alias tick, les grilles et calendriers, la propaga
 de partialité, les trous dans les cibles, l'alignement des projections et les
 exports de support. Les tests préexistants de perturbation du futur conservent
 désormais des OHLC cohérents après modification des prix.
+
+## Calendriers locaux et changements d'heure
+
+`regime_lib.core.temporal.session_grid` génère un `expected_index` UTC à partir
+de dates locales, d'un fuseau IANA et des heures d'ouverture/clôture. Exemple :
+
+```python
+from regime_lib.core.temporal import session_grid
+schedule = session_grid(
+    "2026-03-01", "2026-03-31", timezone="America/New_York",
+    opens="09:30", closes="16:00", timeframe="M30",
+    holidays=["2026-03-17"],
+)
+```
+
+Les jours de semaine valent lundi=0 à dimanche=6 (défaut lundi–vendredi).
+Les dates sont celles d'ouverture ; une clôture <= à l'ouverture est le lendemain.
+Les bornes locales suivent le DST ; les heures ambiguës/inexistantes sont refusées.
+L'intervalle est ouvert à l'ouverture, fermé à la clôture. Fournir les jours fériés
+et fermetures exceptionnelles : aucun calendrier de bourse n'est inventé.
+Les bornes doivent être alignées sur la grille UTC du timeframe ; choisir une
+fréquence plus fine sinon. La grille s'utilise dans `resample(expected_index=...)`
+pour les barres source et dans `Study(expected_index=...)` pour les barres étudiées.
+Une agrégation D1/W1 reste ancrée UTC ; ce helper ne crée pas de bougies journalières
+à clôture locale variable.

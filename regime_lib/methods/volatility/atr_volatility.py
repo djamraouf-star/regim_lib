@@ -91,6 +91,9 @@ class ATRVolatilityDetector(RegimeDetector):
     """
 
     name = "atr_volatility"
+    availability = 'bar_close'
+    regime_dimension = 'volatility'
+    regime_description = 'Niveau de volatilité ATR relatif à ses seuils historiques.'
     REGIME_MAP = {
         "TENDANCE_HAUSSIERE": 0,
         "TENDANCE_BAISSIERE": 1,

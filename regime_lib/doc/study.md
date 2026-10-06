@@ -60,9 +60,19 @@ pivote pour avoir une colonne par `(méthode, feature)`.
 | Numériques | `confidence`, `ctx_hour_ny`, `ctx_day_of_week` |
 | Booléennes | `ctx_is_rollover`, `ctx_is_holiday`, `ctx_in_event` |
 
-**Méthodes offline** : `hmm_gaussian`, `price_action`, `mss_choch` sont
-exclues par défaut (`methodes_causales_only=True`) — leur lookahead
-structurel biaise l'évaluation.
+**Disponibilité** : le filtre `methodes_causales_only=True` conserve les méthodes
+avec `availability="bar_close"`, selon les métadonnées exportées ou, pour les
+anciens parquets, le contrat du registre. HMM, Price Action et MSS/CHOCH sont rétrospectifs et exclus. VPIN utilise
+désormais les buckets antérieurs clos ; ses anciens parquets sans métadonnées
+restent exclus, car ils peuvent contenir une fuite future. Une méthode inconnue sans déclaration est exclue.
+Les nouvelles sorties portent `available_at` ; une date future/manquante est
+refusée en mode causal. Une déclaration contradictoire avec le registre est
+refusée. Cela ne transforme pas les méthodes rétrospectives en méthodes causales.
+
+Les labels restent nominaux. `regime_dimension` et `regime_description`
+précisent ce que mesure chaque détecteur ; deux labels RANGE de familles
+volatilité/force de tendance n'ont pas la même signification. `regime_id` ne
+constitue pas une échelle et ces métadonnées ne calibrent pas `confidence`.
 
 ## 5. Split
 
@@ -100,20 +110,18 @@ Pour chaque modalité d'une feature, comparaison one-vs-rest :
 |---|---|
 | `ret_fwd_K` | cible > 0 |
 | `vol_fwd_K` | cible > médiane globale |
-| `dd_fwd_K` | cible < médiane globale |
+| `dd_fwd_K` | cible > médiane globale (excursion moins négative) |
 | `ru_fwd_K` | cible > médiane globale |
 
 La médiane est calculée sur l'union des deux groupes (sinon les deux
 groupes auraient mécaniquement 50 % de succès chacun).
 
-### 6.3 Lecture croisée
+### 6.3 Portée descriptive
 
-| Observation | Interprétation |
-|---|---|
-| 3 p-values < 0.001 | Signal robuste |
-| Welch seul significatif | Signal tiré par des outliers |
-| Mann-Whitney seul significatif | Décalage de distribution sans changement de moyenne |
-| Aucun significatif | Pas de signal |
+Les tests historiques Welch/Mann-Whitney/z sont descriptifs. Le franchissement
+simultané de trois seuils ne prouve pas la robustesse sous dépendance temporelle.
+Utiliser l'inférence explicite de la section 7.8, sans sélectionner a posteriori
+les périodes, paramètres ou tailles de blocs les plus favorables.
 
 ## 7. Utilisation
 
@@ -489,3 +497,26 @@ La réinstallation régénère le lanceur `regime-report` et remplace sa référ
 historique à `regime_lib.utils.report`. SciPy est une dépendance directe du paquet.
 Les scénarios de reproductibilité et de réécriture d'exports sont couverts par
 [les tests dédiés](../../tests/test_study_reproducibility.py).
+
+### 7.11 Sensibilité et confirmation indépendante
+
+`regime_lib.study.inference.block_sensitivity(feature, target,
+block_sizes=[20, 40, 80], horizon=5, config=InferenceConfig(20), timeframe="H1")`
+retourne toutes les modalités pour chaque taille pré-spécifiée ; une correction
+BY couvre la famille tailles × modalités du diagnostic. Aucun bloc « optimal »
+n'est choisi. Les statuts non estimables sont conservés. Ce diagnostic ne
+remplace pas la famille globale d'une étude complète.
+
+Avant d'examiner une période finale, figer dans un protocole daté : méthodes,
+configurations, features/modalités, cibles/horizons, calendrier, bornes temporelles,
+critère principal, famille de tests, taille principale des blocs, tailles de
+sensibilité et règle de décision. Réserver les données finales, purger les cibles
+atteignant leur frontière, puis exécuter une seule analyse de confirmation.
+Un changement après consultation transforme le résultat en exploration ; une
+nouvelle confirmation exige une nouvelle période réservée. Le logiciel ne peut
+pas certifier que l'utilisateur n'a jamais consulté les données finales.
+
+Le manifeste inclut maintenant la version du protocole, l'environnement complet,
+les ressources du paquet et l'empreinte explicite du support commun. Le manifeste
+du CLI de détection inclut aussi les données préparées, les sorties et le parquet
+exporté. Les chemins seuls ne servent jamais d'identifiants de contenu.

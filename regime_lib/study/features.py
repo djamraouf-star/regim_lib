@@ -73,7 +73,8 @@ def lister_features_disponibles(df: pd.DataFrame) -> dict[str, list[str]]:
         "timestamp", "regime_id", "method", "timeframe", "asset",
         "params_hash", "is_partial", "is_valid", "is_warmup", "coverage",
         "source_count", "expected_count", "source", "price_side", "adjustment",
-        "calendar", "timestamp_convention",
+        "calendar", "timestamp_convention", "availability", "available_at",
+        "regime_dimension", "regime_description", "regime_scale", "revises_history",
     }
     autres = sorted(
         c for c in colonnes
@@ -122,7 +123,6 @@ def extraire_features(
         Indexé par timestamp, une colonne par (méthode, feature),
         nommée `<methode>__<feature>`.
     """
-    METHODES_OFFLINE = {"hmm_gaussian", "price_action", "mss_choch"}
 
     if features is None:
         features = ["regime"]
@@ -138,7 +138,29 @@ def extraire_features(
         methodes = sorted(df["method"].unique().tolist())
 
     if methodes_causales_only:
-        methodes = [m for m in methodes if m not in METHODES_OFFLINE]
+        from regime_lib.core.registry import METHOD_REGISTRY
+        retained = []
+        for name in methodes:
+            rows = df[df["method"].eq(name)]
+            if rows.empty:
+                continue
+            cls = METHOD_REGISTRY.get(name)
+            availability = getattr(cls, "legacy_availability", cls.availability) if cls is not None else "unknown"
+            if "availability" in rows:
+                declared = rows["availability"]
+                if declared.isna().any() or declared.nunique() != 1:
+                    raise ValueError(f"Disponibilité ambiguë pour {name}.")
+                availability = declared.iloc[0]
+                if cls is not None and cls.availability != "bar_close" and availability == "bar_close":
+                    raise ValueError(f"Disponibilité incompatible avec le détecteur {name}.")
+            if availability == "bar_close":
+                if "available_at" in rows:
+                    published = pd.to_datetime(rows["available_at"], utc=True)
+                    timestamps = pd.to_datetime(rows["timestamp"], utc=True)
+                    if published.isna().any() or (published > timestamps).any():
+                        raise ValueError(f"Feature indisponible à date pour {name}.")
+                retained.append(name)
+        methodes = retained
 
     manquantes = [f for f in features if f not in df.columns]
     if manquantes:
@@ -180,4 +202,9 @@ def extraire_features(
     out = out.sort_index()
     out.attrs["series_identity"] = series_identity(pd.DataFrame(identities))
     out.attrs["exclusions"] = exclusions
+    from regime_lib.core.registry import METHOD_REGISTRY
+    out.attrs["interpretations"] = {
+        name: METHOD_REGISTRY[name].interpretation()
+        for name in methodes if name in METHOD_REGISTRY
+    }
     return out

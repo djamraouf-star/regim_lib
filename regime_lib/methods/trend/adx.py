@@ -111,6 +111,9 @@ class ADXDetector(RegimeDetector):
     """Détecteur de régimes par ADX de Wilder."""
 
     name = "adx"
+    availability = 'bar_close'
+    regime_dimension = 'trend_strength'
+    regime_description = 'Force de tendance ADX ; le label ne constitue pas une direction de position.'
     REGIME_MAP = {
         "TENDANCE_HAUSSIERE": 0,
         "TENDANCE_BAISSIERE": 1,

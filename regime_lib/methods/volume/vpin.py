@@ -7,7 +7,8 @@ Définition
 
     bucket_id(t)   = floor( Σ_{s≤t} (bid_vol + ask_vol) / bucket_volume )
     VPIN_bucket(b) = Σ_{i∈b} |ask_vol_i − bid_vol_i| / Σ_{i∈b} (bid_vol_i + ask_vol_i)
-    VPIN(t)        = moyenne glissante de VPIN_bucket sur n_buckets
+    VPIN(t)        = moyenne glissante de VPIN_bucket sur n_buckets,
+                     décalée d'un bucket (buckets complets uniquement)
 
 Interprétation sur forex
 ------------------------
@@ -30,8 +31,14 @@ Mesure exposée
 
 Causalité
 ---------
-Buckets et moyenne glissante strictement passés. Aucun lookahead.
-Le dernier bucket (potentiellement partiel) est invalidé.
+Une ligne du bucket b ne reçoit que la valeur lissée des buckets complets
+≤ b-1 (décalage d'un bucket après la moyenne glissante). Le bucket courant,
+encore incomplet, n'est jamais utilisé : il n'y a plus de réattribution
+rétrospective de la valeur finale d'un bucket à ses lignes. La valeur sur un
+préfixe de la série est identique à celle sur la série complète.
+Conséquences : chauffe de n_buckets + 1 buckets, retard d'un bucket de volume.
+Les anciens parquets sans métadonnées restent exclus des études causales :
+ils peuvent provenir de la version avec réattribution historique (constat C1).
 
 Données requises
 ----------------
@@ -51,10 +58,7 @@ from regime_lib.core.base import RegimeDetector
 from regime_lib.core.registry import register_method
 
 
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
-    "H1": 3600, "H4": 14400, "D1": 86400, "W1": 604800,
-}
+from regime_lib.core.temporal import unaligned_mask
 
 
 @register_method
@@ -78,6 +82,10 @@ class VpinDetector(RegimeDetector):
     """
 
     name = "vpin"
+    availability = 'bar_close'
+    legacy_availability = 'retrospective'
+    regime_dimension = 'quote_toxicity_proxy'
+    regime_description = 'Proxy sur cotations ; valeur des seuls buckets antérieurs clos.'
     REGIME_MAP = {
         "CALME": 0,
         "NORMAL": 1,
@@ -117,21 +125,7 @@ class VpinDetector(RegimeDetector):
             seuil_haut=seuil_haut,
         )
 
-    @staticmethod
-    def _unaligned_mask(
-        index: pd.DatetimeIndex, timeframe: str | None
-    ) -> np.ndarray:
-        step = _TIMEFRAME_SECONDS.get(timeframe or "")
-        if step is None or len(index) == 0:
-            return np.zeros(len(index), dtype=bool)
-        if index.tz is not None:
-            epoch = pd.Timestamp("1970-01-01", tz="UTC")
-        else:
-            epoch = pd.Timestamp("1970-01-01")
-        ts_s = np.asarray(
-            (index - epoch) // pd.Timedelta(seconds=1), dtype=np.int64
-        )
-        return (ts_s % step) != 0
+    _unaligned_mask = staticmethod(unaligned_mask)
 
     @validated_detector
     def fit_predict(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -174,16 +168,15 @@ class VpinDetector(RegimeDetector):
                 sum_tot > 0, sum_imb / sum_tot, np.nan
             )
 
-        # Le dernier bucket est presque sûrement partiel : on l'invalide
-        # pour éviter un VPIN calculé sur moins de `bucket_volume`.
-        if n_buckets_total > 0:
-            vpin_bucket[-1] = np.nan
-
         # --- Moyenne glissante sur n_buckets --------------------------
         vpin_serie = pd.Series(vpin_bucket).rolling(
             self.n_buckets, min_periods=self.n_buckets
         ).mean()
-        vpin_bucket_smooth = vpin_serie.to_numpy(dtype=float)
+
+        # Causalité : une ligne du bucket b ne voit que les buckets
+        # complets <= b-1. Le bucket courant (incomplet) n'est jamais
+        # utilisé, donc le dernier bucket n'a plus besoin d'être invalidé.
+        vpin_bucket_smooth = vpin_serie.shift(1).to_numpy(dtype=float)
 
         # --- Re-mapping bucket → ligne -------------------------------
         vpin_row = vpin_bucket_smooth[bucket_id]

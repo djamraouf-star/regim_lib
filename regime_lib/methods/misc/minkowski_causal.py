@@ -75,6 +75,9 @@ class MinkowskiCausalDetector(RegimeDetector):
     """
 
     name = "minkowski_causal"
+    availability = 'bar_close'
+    regime_dimension = 'relative_return'
+    regime_description = 'Amplitude relative du rendement selon la métrique déclarée.'
     REGIME_MAP = {
         "TIMELIKE": 0,
         "SPACELIKE": 1,

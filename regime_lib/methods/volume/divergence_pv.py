@@ -77,6 +77,9 @@ class DivergencePVDetector(RegimeDetector):
     """
 
     name = "divergence_pv"
+    availability = 'bar_close'
+    regime_dimension = 'price_volume_divergence'
+    regime_description = 'Relation entre variations de prix et volumes.'
     REGIME_MAP = {
         "CONFIRMATION_HAUSSIERE": 0,
         "CONFIRMATION_BAISSIERE": 1,

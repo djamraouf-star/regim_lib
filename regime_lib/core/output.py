@@ -94,6 +94,13 @@ def to_uniform(
     for field in ("source", "price_side", "adjustment", "calendar", "timestamp_convention"):
         if out.attrs.get(field) is not None:
             out[field] = out.attrs[field]
+    for field in ("availability", "regime_dimension", "regime_description",
+                  "regime_scale", "revises_history"):
+        if field in out.attrs:
+            out[field] = out.attrs[field]
+    if "availability" in out.attrs:
+        out["available_at"] = (out.index if out.attrs["availability"] == "bar_close"
+                               else pd.DatetimeIndex([pd.NaT] * len(out), tz="UTC"))
     out.index.name = "timestamp"
     out = out.reset_index()
 

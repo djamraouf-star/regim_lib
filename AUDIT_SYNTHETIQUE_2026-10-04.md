@@ -2,11 +2,111 @@
 
 **Date :** 4 octobre 2026. **Révision auditée :** [1f73f32](https://github.com/djamraouf-star/regim_lib/commit/1f73f32ba2b6888d634d25b7f0ab373d14c97c08).
 
-**Suivi mis à jour :** 5 octobre 2026, après le chantier YAML appliqué localement
-(non commité). Les étapes 1 et 2 avaient été validées sur la révision
+**Suivi mis à jour :** 6 octobre 2026. Cette livraison complète la révision
+[2293bda](https://github.com/djamraouf-star/regim_lib/commit/2293bda) avec les
+corrections décrites ci-dessous, versionnées dans le même commit que ce suivi.
+Les étapes 1 et 2 avaient été validées sur la révision
 [67c47ad](https://github.com/djamraouf-star/regim_lib/commit/67c47ad).
 
-## Chantier YAML — livraison locale du 5 octobre 2026
+## Suivi actuel — les 35 constats
+
+**Ce tableau fait foi pour les statuts actuels.** Les sections datées du
+5 octobre et les constats initiaux ci-dessous sont conservés comme historique.
+Les huit étapes livrées du chantier `study` ne correspondent pas aux six étapes
+de l'audit global : elles ont avancé les étapes globales 4 à 6, sans terminer
+la causalité des détecteurs (étape 3).
+
+**Bilan : 23 corrigés dans le périmètre indiqué, 1 partiel, 11 ouverts.**
+Ce décompte n'est pas un pourcentage de travail : les constats se recoupent et
+leurs efforts restants diffèrent. « Corrigé » ne vaut pas validation empirique.
+
+**Validation locale :** 548 tests réussis avec exclusion de
+`tests/test_screening_eurusd.py` (I24 toujours ouvert), dont 21 nouveaux tests
+numériques, temporels et de traçabilité dans
+[test_audit_completion.py](./tests/test_audit_completion.py). Un avertissement
+joblib sur les cœurs physiques subsiste. La validation d'installation autonome
+est détaillée avec I26. Aucun résultat empirique n'est déduit de ces tests.
+
+**Changements observables :** VPIN utilise désormais les seuls buckets antérieurs
+clos, avec un retard d'un bucket. Cette correction apparue pendant le chantier
+a été conservée et vérifiée sur préfixes/prolongements/futurs perturbés.
+Les nouveaux exports sont disponibles à clôture ; les anciens parquets VPIN sans
+métadonnées restent exclus du mode causal. Le succès z sur dd signifie une
+excursion moins négative. Les parquets portent disponibilité et sémantique.
+
+### Critiques
+
+| Réf. | Statut | Correction livrée / preuve et reste à faire |
+|---|---|---|
+| C1 | Corrigé | Moyenne glissante décalée d’un bucket : seules les valeurs des buckets antérieurs clos sont publiées. Huit préfixes, prolongements et futurs perturbés vérifiés, avec référence numérique dans [les tests](./tests/test_audit_completion.py). La fidélité du proxy et les buckets non fractionnés restent I12. |
+| C2 | Corrigé | Identité, agrégation au timeframe des régimes et alignement strict : [tests du contrat](./tests/test_comparison_contract.py), [entrées study](./tests/test_study_input_contract.py). Horizons en barres uniquement ; durées explicites non implémentées. |
+| C3 | Corrigé | Sélection actif/timeframe/configuration et rejet des doublons : [validation](./regime_lib/study/validation.py), [tests](./tests/test_study_input_contract.py). Comparaison simultanée de deux configurations d'une même méthode hors interface actuelle. |
+| C4 | Corrigé | Types explicites, Spearman non applicable au nominal et rapport adapté : [tests des métriques](./tests/test_study_metric_contract.py), [régressions](./tests/test_study_audit_regressions.py). Ne clôture pas les cinq mesures communes. |
+| C5 | Partiel | Bootstrap par blocs et correction BY globale optionnels : [inférence](./regime_lib/study/inference.py), [tests](./tests/test_study_inference.py). Diagnostic block_sensitivity ajouté, avec toutes les tailles pré-spécifiées et correction de leur famille. Écarts de moyenne seulement ; adéquation/calibration à vérifier sur les données retenues. Le protocole de confirmation est documenté mais la confirmation empirique nécessite une période réservée non consultée : C5 reste partiel. |
+
+### Importants
+
+| Réf. | Statut | Correction livrée / preuve et reste à faire |
+|---|---|---|
+| I1 | Corrigé | Métadonnées availability/available_at/revises_history dans les sorties ; filtre causal piloté par ces métadonnées et repli sur le registre pour les anciens parquets. Méthodes inconnues non déclarées exclues, publications futures et contradictions refusées. Modes des rapports distincts. Les variantes causales pivots/HMM restent I9/I10 ; C1 traité avec garde-fou pour les anciens parquets VPIN. |
+| I2 | Corrigé | Ratio walk-forward appliqué, folds vides refusés et purge selon la fin des cibles : [tests](./tests/test_study_temporal_purge.py). Purge assurée par Study, pas par les fonctions de découpage seules. |
+| I3 | Corrigé | Partialité propagée et trajectoires invalides exclues : [tests](./tests/test_comparison_contract.py). Lire ensemble coverage à l'étage courant et is_partial hérité de la source. |
+| I4 | Corrigé | [session_grid](./regime_lib/core/temporal.py) génère des séances locales converties en UTC, y compris nuits et DST ; heures ambiguës/inexistantes refusées. Calendrier partagé avec resample et Study. Jours fériés explicites ; grilles D1/W1 toujours ancrées UTC, sans prétendre représenter une clôture journalière locale variable. |
+| I5 | Corrigé | Validation OHLCV partagée, y compris appels directs : [validation](./regime_lib/utils/validation.py), [tests](./tests/test_comparison_contract.py). |
+| I6 | Corrigé | Alias timestamp/datetime/date/time mutualisés : [chargeur](./regime_lib/core/data_loader.py), [tests](./tests/test_comparison_contract.py). |
+| I7 | Corrigé | Les 13 détecteurs déclarent dimension, description et échelle nominale ; métadonnées conservées en sortie et dans les features. Labels natifs conservés ; aucune équivalence interméthodes ni direction de position implicite. Les scores confidence restent I8. |
+| I8 | Ouvert | Scores confidence toujours hétérogènes. Déclarer leur type/sens ; aucune calibration commune hors échantillon livrée. |
+| I9 | Ouvert | Pivots rétrospectifs conservés. Distinguer observation, confirmation et révision ; variante causale à événements et tests au futur à livrer. |
+| I10 | Ouvert | HMM rétrospectif conservé. Apprentissage sur train, filtrage avant, caractérisation des états et diagnostics à livrer. |
+| I11 | Ouvert | Machine à états de confirmation MSS/CHOCH ou renommage explicite de la variante simplifiée à réaliser. |
+| I12 | Ouvert | Clarifier données/formules des proxys OFI/VPIN et renommer, ou implémenter les indicateurs correspondants ; distinct de la fuite C1. |
+| I13 | Ouvert | Amorçage ADX à vérifier sur référence numérique indépendante ; corriger ou documenter la variante de Wilder. |
+| I14 | Corrigé | NaN OHLC rejetés à l'entrée publique : [validation](./regime_lib/utils/validation.py), [tests](./tests/test_comparison_contract.py). Le cumul interne Kaufman ne reprend pas après un NaN injecté hors contrat public. |
+| I15 | Ouvert | dd/ru toujours sur close dans [targets](./regime_lib/study/targets.py). Restent nommage excursion/drawdown, MFE/MAE high/low long/short et temps jusqu'aux extrêmes. |
+| I16 | Corrigé | vol_fwd_1 refusé ; le succès z sur dd utilise maintenant cible > médiane, donc une excursion moins négative. Référence numérique et documentation corrigées. |
+| I17 | Corrigé | Hit rate réservé aux features directionnelles déclarées et aux rendements : [tests](./tests/test_study_metric_contract.py). |
+| I18 | Corrigé | Inconnus, partialité et chauffe déclarée exclus ; support commun et couverture exportés : [tests](./tests/test_comparison_contract.py). Tous les détecteurs ne déclarent pas séparément leur chauffe. |
+| I19 | Corrigé | Tous les folds, tailles d'effet, effectifs, épisodes, stabilité et exports : [tests](./tests/test_study_all_folds.py). Stabilité descriptive, pas confirmation indépendante. |
+| I20 | Ouvert | Baseline constante et métriques pénalisant les partitions dégénérées à ajouter à la comparaison PELT. |
+| I21 | Corrigé | Index stricts, cas vides et segments invalides contrôlés : [tests](./tests/test_comparison_contract.py). Ne garantit pas la pertinence de la pureté (I20). |
+| I22 | Corrigé | Manifeste partagé détection/étude : paramètres effectifs, provenance, version du protocole, versions des dépendances, empreintes du code/ressources, données préparées, sorties et artefacts. Support commun explicitement empreinté ; mutation après run refusée à l’export. Rejouer exige de conserver les données originales. |
+| I23 | Corrigé | Résolveur et schémas uniques pour les 13 détecteurs : [tests](./tests/test_config_profiles.py). Refonte des sections donnees/context/segmentation hors périmètre. |
+| I24 | Ouvert | [Test screening](./tests/test_screening_eurusd.py) dépend encore du module analyses absent. Restaurer/déplacer la fonctionnalité ou retirer ce test après décision de périmètre ; obtenir une collecte complète. |
+| I25 | Corrigé | Invariance temporelle VPIN, contre-exemples de remplacement des pivots et normalisation globale HMM ; référence numérique et invariance au futur de Volume Profile ; référence de projection et tests calendrier/métriques/manifestes dans [les nouveaux tests](./tests/test_audit_completion.py). Ces contre-exemples exposent les défauts encore ouverts I9/I10 ; les futures mesures de l’étape 4 devront apporter leurs propres références. |
+| I26 | Corrigé | SciPy et ruptures directs, ressources YAML/CSV déclarées, lanceur regime-report réparé. Wheel construite et installée avec ses dépendances dans un environnement isolé ; pip check, identité des sources installées, instanciation des 13 détecteurs, profils YAML, CSV, calcul PELT et aides des deux commandes vérifiés hors import du dépôt. |
+
+### Mineurs
+
+| Réf. | Statut | Correction livrée / preuve et reste à faire |
+|---|---|---|
+| M1 | Corrigé | Rapport multi-labels, transitions adjacentes et épisodes interrompus par inconnus/trous : [tests](./tests/test_study_descriptive.py). |
+| M2 | Ouvert | Agréger progressivement ou documenter que le chargeur accumule les lots avant concaténation. |
+| M3 | Corrigé | Exports dupliqués et auto-import retirés de methods ; masques VPIN/Volume Profile délégués au calendrier commun ; arguments high/low et variable de pivots inutilisés retirés du classificateur MSS/CHOCH. Ancien rapport dupliqué déjà supprimé. |
+| M4 | Ouvert | Guides enrichis, mais versions/inventaire à centraliser. Les passages anciens de study sur la robustesse statistique ont été réconciliés. |
+
+### Ordre de reprise et critères de clôture
+
+Huit des neuf constats partiels ont reçu leur complément logiciel ; **C5 reste
+partiel sur la confirmation empirique**. Le diagnostic et le protocole sont
+livrés dans le [guide study](./regime_lib/doc/study.md), mais aucun code ne peut
+certifier qu'une période n'a jamais été consultée. Il faut fixer les données,
+les périodes et les critères avant l'analyse finale.
+
+1. **I24 — collecte complète.** Résoudre le module screening absent, puis lancer
+   la suite sans exclusion. I26 est traité séparément par la wheel autonome.
+2. **C1 livré — surveiller la migration.** Régénérer les anciens parquets VPIN
+   pour bénéficier du calcul causal ; la fidélité économique du proxy reste I12.
+3. **I9/I10 — variantes causales pivots/HMM.** Les métadonnées I1 sont livrées ;
+   les algorithmes disponibles à date et leurs tests restent à réaliser.
+4. **Étape globale 4 — mesures communes.** Terminer I8/I15/I20 et les cinq
+   mesures, avec des références numériques ; I7/I16 sont désormais traités.
+5. **C5 — confirmation.** Réserver une période indépendante et figer les choix
+   avant consultation. Les tests synthétiques ne constituent pas cette preuve.
+
+I11–I13 restent un chantier distinct de fidélité des indicateurs. M2/M4 restent
+ouverts. Les constats historiques ci-dessous ne sont pas les statuts actuels.
+
+## Historique — chantier YAML du 5 octobre, désormais livré dans 2293bda
 
 ### Défaut architectural identifié
 
@@ -123,12 +223,12 @@ Cette livraison ne démontre ni causalité ni validité statistique des méthode
 Les étapes 3 à 5 restent à réaliser. Pour I22, les versions du code et des
 dépendances ainsi que les empreintes des données et du support restent ouvertes.
 
-## Portée et conclusion
+## Historique — portée et conclusion au 5 octobre
 
 L'audit initial était statique et concernait la révision 1f73f32 ; sa suite de
 tests n'avait pas été exécutée. Les tableaux de constats ci-dessous conservent
-cet état initial pour la traçabilité. **Le tableau de suivi actualisé et la section du chantier YAML font foi
-pour leur statut après correction.** Cette mise à jour ne constitue pas un nouvel audit
+cet état initial pour la traçabilité. **Le tableau du 6 octobre en tête du document fait foi
+pour les statuts actuels.** Cette mise à jour ne constitue pas un nouvel audit
 exhaustif des méthodes.
 
 L'objectif est de comparer les familles d'indicateurs en projetant leurs
@@ -145,7 +245,7 @@ ordinales sur catégories (C4) et l'inférence statistique (C5) restent à corri
 Les données de marché ne sont pas incluses dans le dépôt et aucune performance
 empirique ni supériorité d'une méthode n'est établie.
 
-## Suivi des corrections — étapes 1 et 2 et chantier YAML
+## Historique — suivi au 5 octobre, étapes 1 et 2 et chantier YAML
 
 **Étape 1 livrée :** [contrat v1.0.0](./regime_lib/doc/protocole_projection_mesure.md),
 avec unités de projection, cinq mesures, conventions temporelles et exemples
@@ -288,7 +388,7 @@ Shannon décrit un histogramme de rendements, pas leur ordre temporel. PCA utili
 
 Les excursions futures maximales décrivent une opportunité rétrospective ; elles ne constituent pas à elles seules un gain réalisable par une règle d'entrée/sortie.
 
-## Plan de livraison actualisé
+## Historique — plan de livraison au 5 octobre
 
 1. **Étape 1 — Livrée : contrat commun.** Identité, unités d'observation,
    conventions, cinq mesures et exemples de référence documentés.

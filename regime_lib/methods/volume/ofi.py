@@ -70,6 +70,9 @@ class OrderFlowImbalanceDetector(RegimeDetector):
     """
 
     name = "ofi"
+    availability = 'bar_close'
+    regime_dimension = 'quote_imbalance'
+    regime_description = 'Proxy de déséquilibre des volumes de cotations, pas de transactions exécutées.'
     REGIME_MAP = {
         "PRESSION_ACHETEUSE": 0,
         "PRESSION_VENDEUSE": 1,

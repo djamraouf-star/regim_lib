@@ -71,6 +71,9 @@ class ShannonEntropyDetector(RegimeDetector):
     """Détecteur de régimes par entropie de Shannon."""
 
     name = "shannon"
+    availability = 'bar_close'
+    regime_dimension = 'return_dispersion'
+    regime_description = 'Entropie de la distribution des rendements, sans mesure de leur ordre temporel.'
     REGIME_MAP = {
         "ORDONNE": 0,
         "NEUTRE": 1,

@@ -295,6 +295,7 @@ def _build_detectors(args, profil, timeframe):
 def _describe_detectors(detectors):
     return {
         name: {
+            "interpretation": detector.interpretation(),
             "params": detector.params,
             "sources": detector.param_sources,
             "params_hash": hash_params(detector.params),
@@ -480,9 +481,14 @@ def run(args: argparse.Namespace) -> int:
         rows_par_timeframe[tf] = n_rows
 
     # --- Export ---------------------------------------------------------
-    export_long(all_frames, args.output)
+    from regime_lib.utils.provenance import environment, frame_info, file_hash
+    export_path = export_long(all_frames, args.output)
     export_meta(
         {
+            **environment(),
+            "input_prepared": frame_info(df_raw),
+            "outputs": [frame_info(frame) for frame in all_frames],
+            "artifacts": {export_path.name: file_hash(export_path)},
             "url": args.url,
             "source_type": source_type,
             "timeframes": timeframes,
@@ -500,7 +506,8 @@ def run(args: argparse.Namespace) -> int:
             "method_params": args.method_params,
             "effective_config": effective_config,
             "methodes_avec_lookahead": all_lookahead,
-            "run_descriptif": bool(all_lookahead),
+            "run_descriptif": any(d.availability != "bar_close"
+                                   for group in detectors.values() for d in group.values()),
             # Contexte temporel
             "with_context": bool(args.with_context),
             "run_at": datetime.now(timezone.utc).isoformat(),

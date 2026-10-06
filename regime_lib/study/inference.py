@@ -162,3 +162,28 @@ def correct_family(tables, confidence_level):
         tables[key].loc[modality, "block_p_by"] = adjusted
         if np.isfinite(adjusted):
             tables[key].loc[modality, "reject_by"] = adjusted <= 1 - confidence_level
+
+
+def block_sensitivity(feature, target, *, block_sizes, horizon, config,
+                      timeframe=None, expected_index=None):
+    """Diagnostic pré-spécifié de sensibilité, sans sélectionner une taille optimale.
+
+    Une famille BY couvre toutes les tailles et modalités de ce diagnostic.
+    Ne remplace pas la famille globale de Study, ni une confirmation indépendante.
+    """
+    from dataclasses import replace
+    from regime_lib.study.evaluation import par_modalite_tests
+    sizes = list(block_sizes)
+    if len(sizes) < 2 or len(set(sizes)) != len(sizes):
+        raise ValueError("Déclarer au moins deux tailles de blocs distinctes.")
+    tables = {}
+    table = par_modalite_tests(feature, target, timeframe=timeframe, expected_index=expected_index)
+    for size in sizes:
+        candidate = replace(config, block_size=size)
+        tables[size] = bootstrap_modalities(feature, target, table, candidate,
+            key=("sensitivity", size), horizon=horizon,
+            timeframe=timeframe, expected_index=expected_index)
+    correct_family(tables, config.confidence_level)
+    result = pd.concat(tables, names=["sensitivity_block_size", "modality"])
+    result.attrs["purpose"] = "diagnostic_only_no_block_selection"
+    return result

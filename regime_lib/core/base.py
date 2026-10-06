@@ -82,6 +82,19 @@ class RegimeDetector(ABC):
     REGIME_MAP: ClassVar[dict[str, int]] = {}
     requires_lookahead: ClassVar[bool] = False
     REQUIRES_COLUMNS: ClassVar[list[str]] = []
+    availability: ClassVar[str] = "unknown"
+    regime_dimension: ClassVar[str] = "unspecified"
+    regime_description: ClassVar[str] = "Sémantique non déclarée."
+
+    @classmethod
+    def interpretation(cls) -> dict:
+        """Les labels sont nominaux et ne constituent pas une échelle commune."""
+        return {"availability": cls.availability,
+                "regime_dimension": cls.regime_dimension,
+                "regime_description": cls.regime_description,
+                "regime_scale": "nominal",
+                "revises_history": cls.availability != "bar_close"}
+
 
     def __init__(
         self,

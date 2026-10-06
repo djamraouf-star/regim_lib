@@ -24,7 +24,7 @@ La nature du "succès" dépend du type de cible :
 
 - `ret_fwd_K` : cible > 0 (retour positif)
 - `vol_fwd_K` : cible > médiane (régime agité vs calme)
-- `dd_fwd_K`  : cible < médiane (drawdown faible = succès)
+- `dd_fwd_K`  : cible > médiane (excursion négative moins profonde)
 - `ru_fwd_K`  : cible > médiane (run-up fort = succès)
 
 Sans cette adaptation, le test z est trivial sur les cibles non
@@ -69,7 +69,7 @@ def _convention_succes(
     if nom_cible.startswith("vol_fwd_"):
         return (cible > seuil).to_numpy()
     if nom_cible.startswith("dd_fwd_"):
-        return (cible < seuil).to_numpy()
+        return (cible > seuil).to_numpy()
     if nom_cible.startswith("ru_fwd_"):
         return (cible > seuil).to_numpy()
 
