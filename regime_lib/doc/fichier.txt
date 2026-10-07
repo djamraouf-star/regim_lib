@@ -1,0 +1,61 @@
+# regime_lib
+
+Bibliothèque de détection de régimes de marché multi-méthodes.
+
+## Usage et limites
+
+Cette bibliothèque est destinée à la recherche exploratoire : elle permet
+d'analyser des régimes de marché et d'explorer des hypothèses de stratégie.
+Elle n'est pas conçue ni validée pour le trading en production, la génération
+d'ordres ou l'exécution automatisée. Les résultats ne sont pas des signaux de
+trading validés.
+
+## Principes
+
+- **Causalité par défaut** : les méthodes nécessitant du lookahead sont
+  protégées et demandent une activation explicite.
+- **Isolation des méthodes** : chaque méthode hérite de `RegimeDetector` sans couplage entre méthodes.
+- **Sortie uniforme** : toutes les méthodes produisent le même schéma
+  tabulaire. Les labels restent spécifiques à leur méthode et ne sont pas
+  nécessairement comparables sémantiquement.
+- **Multi-timeframes et reproductibilité** : Parquet long, métadonnées JSON
+  et hachage des paramètres.
+
+## Guides et références
+
+```{toctree}
+:maxdepth: 2
+
+design
+output_format
+adding_method
+config
+context
+pca_axis
+mss_choch
+minkowski_causal
+shannon
+cli
+study
+api
+```
+
+## Notes de recherche
+
+Les analyses exploratoires et notes de méthode sont regroupées à part des
+contrats et guides d'utilisation.
+
+```{toctree}
+:maxdepth: 2
+
+research/index
+```
+
+## Historique et développement
+
+```{toctree}
+:maxdepth: 2
+
+archives/index
+TODO
+```

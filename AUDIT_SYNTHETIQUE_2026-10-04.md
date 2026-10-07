@@ -2,9 +2,10 @@
 
 **Date :** 4 octobre 2026. **Révision auditée :** [1f73f32](https://github.com/djamraouf-star/regim_lib/commit/1f73f32ba2b6888d634d25b7f0ab373d14c97c08).
 
-**Suivi mis à jour :** 6 octobre 2026. Cette livraison complète la révision
-[2293bda](https://github.com/djamraouf-star/regim_lib/commit/2293bda) avec les
-corrections décrites ci-dessous, versionnées dans le même commit que ce suivi.
+**Suivi mis à jour :** 7 octobre 2026. Les corrections décrites ci-dessous sont
+versionnées dans [0fa3949](https://github.com/djamraouf-star/regim_lib/commit/0fa3949),
+qui complète la révision
+[2293bda](https://github.com/djamraouf-star/regim_lib/commit/2293bda).
 Les étapes 1 et 2 avaient été validées sur la révision
 [67c47ad](https://github.com/djamraouf-star/regim_lib/commit/67c47ad).
 
@@ -20,7 +21,7 @@ la causalité des détecteurs (étape 3).
 Ce décompte n'est pas un pourcentage de travail : les constats se recoupent et
 leurs efforts restants diffèrent. « Corrigé » ne vaut pas validation empirique.
 
-**Validation locale :** 548 tests réussis avec exclusion de
+**Dernière validation exécutée (6 octobre 2026) :** 548 tests réussis avec exclusion de
 `tests/test_screening_eurusd.py` (I24 toujours ouvert), dont 21 nouveaux tests
 numériques, temporels et de traçabilité dans
 [test_audit_completion.py](./tests/test_audit_completion.py). Un avertissement
