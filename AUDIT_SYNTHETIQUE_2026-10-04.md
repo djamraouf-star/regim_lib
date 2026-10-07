@@ -24,7 +24,7 @@ la causalité des détecteurs (étape 3).
 Ce décompte n'est pas un pourcentage de travail : les constats se recoupent et
 leurs efforts restants diffèrent. « Corrigé » ne vaut pas validation empirique.
 
-**Dernière validation exécutée (7 octobre 2026) :** 579 tests réussis sur la
+**Dernière validation exécutée (7 octobre 2026) :** 581 tests réussis sur la
 suite complète, sans exclusion (`.venv/bin/python -m pytest -o addopts='' -q`).
 Les 18 nouveaux cas de [stratification](./tests/test_study_stratification.py)
 remplacent les deux tests orphelins du script EURUSD (qui étaient auparavant
@@ -34,6 +34,13 @@ les contrats de contexte, tous les folds, les exports et la traçabilité.
 Les 12 cas supplémentaires de [buckets VPIN](./tests/test_vpin_buckets.py)
 couvrent le fractionnement, les frontières, les volumes nuls et très grands,
 une référence indépendante par unités de volume et la causalité.
+Les deux cas d'[intégration VPIN](./tests/test_vpin_integration.py) vérifient
+le parcours CLI depuis des ticks et des barres enrichies, sur M1/M5, jusqu'aux
+exports Parquet/JSON et à l'extraction des features causales Study. La relecture
+des barres restaure les noms `bid_volume`/`ask_volume`, auparavant normalisés
+en noms tick puis perdus au resampling. Le [guide volume](./regime_lib/doc/volume.md)
+documente les usages Python/CLI/Study et le calcul après agrégation temporelle.
+Cette intégration ne clôture pas I12 : VPIN reste un proxy sur cotations.
 Un avertissement joblib sur les cœurs physiques subsiste. La validation
 d'installation autonome antérieure reste détaillée avec I26 ; la wheel n'a
 pas été reconstruite pour cette modification. Aucun résultat empirique

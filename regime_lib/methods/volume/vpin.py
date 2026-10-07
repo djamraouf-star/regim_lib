@@ -43,7 +43,8 @@ ils peuvent provenir de la version avec réattribution historique (constat C1).
 Données requises
 ----------------
 Colonnes : `bid_volume`, `ask_volume` (issues de l’agrégation tick).
-Disponible uniquement sur données tick.
+Accepte les barres OHLCV enrichies de ces volumes ; le CLI agrège les ticks
+avant le calcul au timeframe demandé.
 """
 
 from __future__ import annotations

@@ -603,6 +603,9 @@ def load_parquet(
 
     # Traitement barres
     if source_type != "ticks":
+        # Les alias tick sont normalisés en camelCase à la lecture. Sur des
+        # barres, restaurer les noms attendus par le resampling et les méthodes.
+        df = df.rename(columns={"bidVolume": "bid_volume", "askVolume": "ask_volume"})
         if not isinstance(df.index, pd.DatetimeIndex):
             for candidate in TICK_TIMESTAMP_COLUMNS:
                 if candidate in df.columns:

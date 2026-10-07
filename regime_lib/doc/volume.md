@@ -155,6 +155,52 @@ Les scores peuvent changer par rapport à l'ancien décalage d'un bucket,
 notamment aux frontières et pour les gros volumes. Les anciens parquets sans
 métadonnées restent exclus des études causales.
 
+### Utiliser VPIN dans la bibliothèque
+
+Le nom enregistré est `vpin`. Le CLI accepte les ticks de cotations ou des
+barres OHLCV contenant `bid_volume` et `ask_volume`. Un volume total seul
+ne permet pas de calculer ce proxy.
+
+```bash
+python -m regime_lib --url EURUSD_M1.parquet --asset EURUSD \
+  --source-timeframe M1 --timestamp-convention close \
+  --timeframe M1,M5 --methods vpin --output outputs/vpin \
+  --method-params '{"vpin": {"bucket_volume": 10000.0, "n_buckets": 50}}'
+```
+
+Pour un fichier de ticks, omettre `--source-timeframe` et
+`--timestamp-convention` : le chargeur produit des barres M1.
+Le calcul intervient **après agrégation au timeframe demandé** : le score
+M5 peut différer du score M1, car les déséquilibres opposés se compensent
+à l'intérieur d'une barre. Ce parcours ne calcule pas le VPIN tick par tick.
+
+```python
+from regime_lib.methods.volume.vpin import VpinDetector
+from regime_lib.core.data_loader import load_parquet, resample
+
+bars, asset = load_parquet("EURUSD_M1.parquet", timeframe="M1")
+detector = VpinDetector(timeframe="M1", bucket_volume=10000., n_buckets=50)
+result = detector.fit_predict(resample(bars, "M1"))
+```
+
+L'export CLI conserve `vpin_value`, les labels, `confidence`, les paramètres
+et la disponibilité à clôture. Pour sélectionner le score dans les features
+Study depuis le Parquet exporté :
+
+```python
+import pandas as pd
+from regime_lib.study.features import extraire_features
+
+regimes = pd.read_parquet("outputs/vpin/regimes.parquet")
+features = extraire_features(
+    regimes, methodes=["vpin"], features=["regime", "vpin_value"],
+    asset="EURUSD", timeframe="M1",
+)
+```
+
+`confidence` mesure une distance aux seuils, sans calibration probabiliste.
+Les seuils et le volume des buckets sont des paramètres exploratoires.
+
 ### 4.2 `volume_profile` — Zones de valeur
 
 Sur une fenêtre glissante, histogramme du volume par niveau de prix. La
