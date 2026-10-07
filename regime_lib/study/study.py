@@ -83,6 +83,7 @@ class Study:
         expected_index: pd.DatetimeIndex | None = None,
         feature_types: dict[str, str] | None = None,
         inference: InferenceConfig | None = None,
+        stratify_by: str | None = None,
         **split_kwargs,
     ) -> None:
         if split not in SCHEMAS_SPLIT:
@@ -95,6 +96,13 @@ class Study:
             raise TypeError("inference doit être une InferenceConfig.")
         if inference is not None and not tests_modalite:
             raise ValueError("inference requiert tests_modalite=True.")
+        from regime_lib.study.stratification import STRATIFICATION_COLUMNS
+        if stratify_by is not None and (not isinstance(stratify_by, str) or stratify_by not in STRATIFICATION_COLUMNS):
+            raise ValueError(f"stratify_by doit être parmi {sorted(STRATIFICATION_COLUMNS)}.")
+        self.stratify_by = stratify_by
+        self.df_strates: pd.DataFrame | None = None
+        self.resultats_stratifies: pd.DataFrame | None = None
+        self.couverture_strates: pd.DataFrame | None = None
         self.inference = inference
         self.feature_types = dict(feature_types or {})
         if any(value not in FEATURE_TYPES for value in self.feature_types.values()):
@@ -149,6 +157,9 @@ class Study:
         self.resultats_tests = None
         self._detail_conditionnel = None
         self._source_metadata = {}
+        self.df_strates = None
+        self.resultats_stratifies = None
+        self.couverture_strates = None
         self._charger_features()
         self._charger_cibles()
         self._evaluer()
@@ -171,6 +182,11 @@ class Study:
             configurations=self.configurations,
         )
         self.df_features = df_features
+        if self.stratify_by is not None:
+            from regime_lib.study.stratification import extract_strata
+            self.df_strates = extract_strata(
+                df_regimes, df_features, self.stratify_by, self.configurations,
+            )
 
     def _charger_cibles(self) -> None:
         if self.ohlcv_data is None:
@@ -251,6 +267,11 @@ class Study:
                 name, self.feature_types.get(name.split("__", 1)[-1])))
             for name in features
         }
+        if self.stratify_by is not None:
+            if self.df_strates is None or not self.df_strates.index.equals(common):
+                raise ValueError("Contexte de stratification absent ou mal aligné.")
+        strata_tables = {}
+        strata_coverage = []
         lignes = []
         detail = {}
         tests_dict = {}
@@ -316,8 +337,21 @@ class Study:
                                 horizon=parser_cible(col_cible)[1], timeframe=timeframe,
                                 expected_index=self.expected_index,
                             )
+                    if self.stratify_by is not None:
+                        from regime_lib.study.stratification import evaluate_strata
+                        tables, coverage = evaluate_strata(
+                            f_test, c_test, self.df_strates.loc[idx_test, self.stratify_by],
+                            key=cle, context_name=self.stratify_by,
+                            tests=self.tests_modalite, inference=self.inference,
+                            timeframe=timeframe, expected_index=self.expected_index,
+                        )
+                        strata_tables.update(tables)
+                        strata_coverage.extend(coverage)
         if self.inference is not None:
-            correct_family(tests_dict, self.inference.confidence_level)
+            correct_family({**tests_dict, **strata_tables}, self.inference.confidence_level)
+        from regime_lib.study.stratification import flatten_strata
+        self.resultats_stratifies = flatten_strata(strata_tables) if self.stratify_by else None
+        self.couverture_strates = pd.DataFrame(strata_coverage) if self.stratify_by else None
 
         self.resultats = pd.DataFrame(lignes)
         self._detail_conditionnel = detail
@@ -341,6 +375,7 @@ class Study:
             "study_common_support.parquet", "study_tests_modalite.parquet",
             "study_conditionnel.parquet", "study_stability.parquet", "study_report.md",
             "study_inference.json", "study_metadata.json",
+            "study_stratified.parquet", "study_strata_coverage.parquet",
         }
         with TemporaryDirectory(dir=output_dir.parent, prefix=".study-export-") as temp:
             staging = Path(temp)
@@ -380,7 +415,10 @@ class Study:
 
         if self.inference is not None:
             (output_dir / "study_inference.json").write_text(
-                json.dumps(self.inference.to_dict(), indent=2), encoding="utf-8")
+                json.dumps(self._inference_metadata(), indent=2), encoding="utf-8")
+        if self.resultats_stratifies is not None:
+            self.resultats_stratifies.to_parquet(output_dir / "study_stratified.parquet", index=False)
+            self.couverture_strates.to_parquet(output_dir / "study_strata_coverage.parquet", index=False)
 
         parquet_path = output_dir / "study_results.parquet"
         self.resultats.to_parquet(parquet_path, index=False)
@@ -442,9 +480,32 @@ class Study:
             rapport += _to_markdown(self.couverture)
             if self.support_commun is not None and not self.support_commun.any().any():
                 rapport += "\n\nAucune estimation : support valide commun vide.\n"
+        if self.stratify_by is not None:
+            from regime_lib.study.report import _to_markdown
+            rapport += f"\n\n## Analyse stratifiée : {self.stratify_by}\n\n"
+            rapport += ("Chaque modalité est comparée aux autres dans la même strate et le même fold. "
+                        "Les horizons restent calculés sur la grille complète. Les cibles peuvent dépasser "
+                        "la fin de la session de départ. Les lignes hors strate restent masquées pour "
+                        "les épisodes et le bootstrap.\n\n")
+            if self.inference is not None:
+                rapport += "Correction BY commune aux comparaisons globales et stratifiées.\n\n"
+            rapport += _to_markdown(self.couverture_strates)
+            rapport += "\n\n"
+            if self.resultats_stratifies.empty:
+                rapport += "Aucune estimation stratifiée : support valide vide.\n"
+            else:
+                rapport += _to_markdown(self.resultats_stratifies)
         rapport_path.write_text(rapport, encoding="utf-8")
 
 
+
+    def _inference_metadata(self):
+        if self.inference is None:
+            return None
+        metadata = self.inference.to_dict()
+        if self.stratify_by is not None:
+            metadata["family"] = "all_global_and_stratified_fold_feature_target_modality_mean_differences"
+        return metadata
 
     def detail_conditionnel(
         self,

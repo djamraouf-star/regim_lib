@@ -2,7 +2,8 @@
 
 **Date :** 4 octobre 2026. **Révision auditée :** [1f73f32](https://github.com/djamraouf-star/regim_lib/commit/1f73f32ba2b6888d634d25b7f0ab373d14c97c08).
 
-**Suivi mis à jour :** 7 octobre 2026. Les corrections décrites ci-dessous sont
+**Suivi mis à jour :** 7 octobre 2026. La présente livraison clôture I24
+avec la stratification intégrée à Study. Les corrections antérieures sont
 versionnées dans [0fa3949](https://github.com/djamraouf-star/regim_lib/commit/0fa3949),
 qui complète la révision
 [2293bda](https://github.com/djamraouf-star/regim_lib/commit/2293bda).
@@ -17,16 +18,21 @@ Les huit étapes livrées du chantier `study` ne correspondent pas aux six étap
 de l'audit global : elles ont avancé les étapes globales 4 à 6, sans terminer
 la causalité des détecteurs (étape 3).
 
-**Bilan : 23 corrigés dans le périmètre indiqué, 1 partiel, 11 ouverts.**
+**Bilan : 24 corrigés dans le périmètre indiqué, 1 partiel, 10 ouverts.**
 Ce décompte n'est pas un pourcentage de travail : les constats se recoupent et
 leurs efforts restants diffèrent. « Corrigé » ne vaut pas validation empirique.
 
-**Dernière validation exécutée (6 octobre 2026) :** 548 tests réussis avec exclusion de
-`tests/test_screening_eurusd.py` (I24 toujours ouvert), dont 21 nouveaux tests
-numériques, temporels et de traçabilité dans
-[test_audit_completion.py](./tests/test_audit_completion.py). Un avertissement
-joblib sur les cœurs physiques subsiste. La validation d'installation autonome
-est détaillée avec I26. Aucun résultat empirique n'est déduit de ces tests.
+**Dernière validation exécutée (7 octobre 2026) :** 566 tests réussis sur la
+suite complète, sans exclusion (`.venv/bin/python -m pytest -o addopts='' -q`).
+Les 18 nouveaux cas de [stratification](./tests/test_study_stratification.py)
+remplacent les deux tests orphelins du script EURUSD (qui étaient auparavant
+exclus des 548 tests exécutables). Ils vérifient notamment l'isolation entre
+sessions, les horizons, les interruptions temporelles, la famille BY globale,
+les contrats de contexte, tous les folds, les exports et la traçabilité.
+Un avertissement joblib sur les cœurs physiques subsiste. La validation
+d'installation autonome antérieure reste détaillée avec I26 ; la wheel n'a
+pas été reconstruite pour cette modification. Aucun résultat empirique
+n'est déduit de ces tests.
 
 **Changements observables :** VPIN utilise désormais les seuls buckets antérieurs
 clos, avec un retard d'un bucket. Cette correction apparue pendant le chantier
@@ -72,7 +78,7 @@ excursion moins négative. Les parquets portent disponibilité et sémantique.
 | I21 | Corrigé | Index stricts, cas vides et segments invalides contrôlés : [tests](./tests/test_comparison_contract.py). Ne garantit pas la pertinence de la pureté (I20). |
 | I22 | Corrigé | Manifeste partagé détection/étude : paramètres effectifs, provenance, version du protocole, versions des dépendances, empreintes du code/ressources, données préparées, sorties et artefacts. Support commun explicitement empreinté ; mutation après run refusée à l’export. Rejouer exige de conserver les données originales. |
 | I23 | Corrigé | Résolveur et schémas uniques pour les 13 détecteurs : [tests](./tests/test_config_profiles.py). Refonte des sections donnees/context/segmentation hors périmètre. |
-| I24 | Ouvert | [Test screening](./tests/test_screening_eurusd.py) dépend encore du module analyses absent. Restaurer/déplacer la fonctionnalité ou retirer ce test après décision de périmètre ; obtenir une collecte complète. |
+| I24 | Corrigé | Criblage régime × contexte intégré à Study via `stratify_by`, avec grille temporelle conservée, contrôles du contexte, couverture, exports/rapport et manifeste. Inférence optionnelle avec famille BY commune aux comparaisons globales et stratifiées. Les [tests intégrés](./tests/test_study_stratification.py) remplacent le test orphelin ; suite complète : 566 réussis sans exclusion. Voir le [guide](./regime_lib/doc/study.md). |
 | I25 | Corrigé | Invariance temporelle VPIN, contre-exemples de remplacement des pivots et normalisation globale HMM ; référence numérique et invariance au futur de Volume Profile ; référence de projection et tests calendrier/métriques/manifestes dans [les nouveaux tests](./tests/test_audit_completion.py). Ces contre-exemples exposent les défauts encore ouverts I9/I10 ; les futures mesures de l’étape 4 devront apporter leurs propres références. |
 | I26 | Corrigé | SciPy et ruptures directs, ressources YAML/CSV déclarées, lanceur regime-report réparé. Wheel construite et installée avec ses dépendances dans un environnement isolé ; pip check, identité des sources installées, instanciation des 13 détecteurs, profils YAML, CSV, calcul PELT et aides des deux commandes vérifiés hors import du dépôt. |
 
@@ -93,8 +99,8 @@ livrés dans le [guide study](./regime_lib/doc/study.md), mais aucun code ne peu
 certifier qu'une période n'a jamais été consultée. Il faut fixer les données,
 les périodes et les critères avant l'analyse finale.
 
-1. **I24 — collecte complète.** Résoudre le module screening absent, puis lancer
-   la suite sans exclusion. I26 est traité séparément par la wheel autonome.
+1. **I24 livré — collecte complète.** Stratification intégrée et suite complète
+   validée sans exclusion. I26 a été traité séparément par la wheel autonome.
 2. **C1 livré — surveiller la migration.** Régénérer les anciens parquets VPIN
    pour bénéficier du calcul causal ; la fidélité économique du proxy reste I12.
 3. **I9/I10 — variantes causales pivots/HMM.** Les métadonnées I1 sont livrées ;
@@ -213,7 +219,7 @@ Les tests ciblés ont été relancés après la simplification finale du YAML.
 Les liens locaux des documents modifiés et `git diff --check` ont été vérifiés.
 
 L'avertissement joblib sur les cœurs physiques reste présent. Le
-[test de screening](./tests/test_screening_eurusd.py) reste exclu pour son
+[test de screening historique](https://github.com/djamraouf-star/regim_lib/blob/1f73f32/tests/test_screening_eurusd.py) reste exclu pour son
 import absent : **I24 reste ouvert**, la suite complète n'est pas validée.
 Les ressources YAML/CSV sont déclarées dans [pyproject.toml](./pyproject.toml),
 mais aucune construction/installation autonome de wheel n'a été validée ; les
@@ -294,7 +300,7 @@ les dépendances du projet ainsi que SciPy et ruptures installés explicitement 
 joblib sur la détection des cœurs physiques.** Compilation Python, liens des
 nouveaux documents et `git diff --check` vérifiés.
 
-La collecte du [test de screening](./tests/test_screening_eurusd.py) a également
+La collecte du [test de screening historique](https://github.com/djamraouf-star/regim_lib/blob/1f73f32/tests/test_screening_eurusd.py) a également
 été tentée : elle échoue sur le module absent
 `analyses.EURUSD.scripts.screening_eurusd`. **I24 reste ouvert ; il ne s'agit donc
 pas d'une validation de la suite entière.** L'installation explicite de SciPy
@@ -370,7 +376,7 @@ Points solides : registre extensible, seuils historiques décalés pour ATR/Kauf
 |---|---|---|
 | I22 | [base.py](./regime_lib/core/base.py), `__init__`, `_resolve` ; [cli.py](./regime_lib/cli.py), `_run_one_timeframe` | Hash des arguments initiaux, souvent `None`, plutôt que des paramètres effectifs. Sérialiser les paramètres résolus, version du code, dépendances et empreinte des données. |
 | I23 | [loader.py](./regime_lib/config/loader.py), `load_profile`, `_deep_merge` ; constructeurs [HMM](./regime_lib/methods/statistical/hmm_gaussian.py) et [Shannon](./regime_lib/methods/entropy/shannon.py) | Chemin utilisateur nommé `default.yaml` ignoré ; cascade HMM distincte ; `n_bins` Shannon par timeframe non résolu comme tel ; surcharges globales dominées par valeurs par timeframe héritées. Unifier la cascade et tester ses priorités. |
-| I24 | [test_screening_eurusd.py](./tests/test_screening_eurusd.py), import de module | Module `analyses.EURUSD.scripts.screening_eurusd` absent du dépôt audité : collecte autonome bloquée. Versionner le module ou déplacer ses fonctions dans la bibliothèque. |
+| I24 | [test_screening_eurusd.py historique](https://github.com/djamraouf-star/regim_lib/blob/1f73f32/tests/test_screening_eurusd.py), import de module | Module `analyses.EURUSD.scripts.screening_eurusd` absent du dépôt audité : collecte autonome bloquée. Versionner le module ou déplacer ses fonctions dans la bibliothèque. |
 | I25 | [tests](./tests/), couverture | Aucun test dédié VPIN, Volume Profile ou projection ; certaines assertions se limitent aux formes et bornes. Ajouter contre-exemples temporels et résultats numériques attendus indépendants. |
 | I26 | [pyproject.toml](./pyproject.toml) ; imports [segmentation.py](./regime_lib/projection/segmentation.py) et [evaluation.py](./regime_lib/study/evaluation.py) | `ruptures` absent des dépendances et SciPy seulement transitif ; ressources YAML/CSV non explicitement déclarées. Déclarer dépendances/extras et ressources. Le risque d'omission des ressources reste à confirmer par construction et installation d'une wheel propre. |
 

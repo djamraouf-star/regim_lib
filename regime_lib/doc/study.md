@@ -520,3 +520,67 @@ Le manifeste inclut maintenant la version du protocole, l'environnement complet,
 les ressources du paquet et l'empreinte explicite du support commun. Le manifeste
 du CLI de détection inclut aussi les données préparées, les sorties et le parquet
 exporté. Les chemins seuls ne servent jamais d'identifiants de contenu.
+
+## Comparer les régimes au sein de chaque session
+
+`Study(..., stratify_by="ctx_session")` conserve l'étude globale et ajoute
+les comparaisons par session dans `resultats_stratifies`. Le contexte doit
+être présent dans le parquet de régimes. Une seule variable peut être choisie :
+`ctx_session`, `ctx_event_type`, `ctx_day_of_week`, `ctx_is_rollover`,
+`ctx_is_holiday` ou `ctx_in_event`. Par défaut, `stratify_by=None` conserve
+le comportement sans stratification.
+
+```python
+from regime_lib.study import Study
+
+study = Study(
+    regimes_path="regimes.parquet",
+    ohlcv_path="prix.parquet",
+    features=["regime"],
+    targets=["ret_fwd_5"],
+    split="walk_forward",
+    stratify_by="ctx_session",
+)
+study.run()
+study.save("resultats")
+```
+
+Chaque modalité est comparée aux autres de la **même strate**, pour chaque
+fold, feature et cible. Une strate est définie au timestamp de départ de la
+cible : celle-ci peut dépasser la fin de la session. Les cibles, le découpage
+et la purge sont calculés sur la grille complète, avant la stratification.
+Les observations hors strate sont masquées, jamais concaténées pour former
+une fausse continuité. Les épisodes et les blocs de bootstrap restent ainsi
+séparés aux interruptions. Des sessions trop courtes pour la taille de bloc
+produisent `insufficient_support`, sans raccourcissement automatique des blocs.
+
+Le contexte est contrôlé entre les méthodes/configurations effectivement
+retenues, y compris pour les lignes invalides : des valeurs contradictoires
+au même timestamp sont refusées. Les valeurs manquantes et `HORS_SESSION`
+pour `ctx_session` sont exclues des comparaisons stratifiées et comptabilisées
+dans `couverture_strates`. Elles n'excluent pas, à elles seules, les observations
+de l'analyse globale. Le support commun des features reste appliqué par cible.
+
+Avec `tests_modalite=True`, les résultats contiennent les effectifs, les
+épisodes, les différences de moyenne/médiane, Cliff's delta et les tests
+exploratoires habituels. Les groupes insuffisants restent visibles avec leur
+statut. Avec `tests_modalite=False`, seules les statistiques descriptives par
+modalité sont produites, sans tests ni inférence.
+
+Si `inference=InferenceConfig(...)` est activé, la correction BY porte sur une
+famille commune aux comparaisons globales **et** stratifiées, tous folds,
+features, cibles et modalités confondus. Les anciennes corrections BH du
+script EURUSD ne sont pas réintroduites. Modifier une autre session ne change
+pas les estimations locales ni leurs valeurs p brutes, mais peut changer les
+valeurs p corrigées de cette famille globale. L'inférence demeure exploratoire
+et ne remplace pas la confirmation indépendante de C5.
+
+Les exports ajoutés sont `study_stratified.parquet` (colonnes `fold`, `feature`,
+`cible`, `contexte`, `strate`, `modalite` et statistiques) et
+`study_strata_coverage.parquet`. Dans la couverture, `scope="fold"` indique le
+bilan des exclusions et `scope="strate"` le support de chaque catégorie ; ces
+deux niveaux ne doivent pas être additionnés. Le rapport inclut une section
+stratifiée. Le manifeste enregistre l'option, les empreintes du contexte,
+des résultats et de la couverture. Une modification après `run()` exige de
+relancer l'étude avant l'export. Aucun entraînement supplémentaire des détecteurs
+n'est effectué par cette option.
