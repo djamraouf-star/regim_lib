@@ -35,6 +35,7 @@ pca_axis
 mss_choch
 minkowski_causal
 shannon
+volume
 cli
 study
 api

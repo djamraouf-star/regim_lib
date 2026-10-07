@@ -55,6 +55,13 @@ python -m regime_lib \
 python -m regime_lib --list-profiles
 ```
 
+**Lister les méthodes actuellement enregistrées :**
+```bash
+python -m regime_lib --list-methods
+```
+La liste provient du registre chargé par les modules de méthodes ; elle
+constitue l'inventaire à jour, sans liste parallèle à maintenir dans le README.
+
 **Exécuter depuis un Parquet de cotations tick :**
 ```bash
 python -m regime_lib \
@@ -76,9 +83,12 @@ et un tick à la frontière T est affecté à la barre suivante. La première et
 la dernière barre M1 sont marquées partielles.
 
 L'API Python permet de sélectionner `prix="bid"`, `"ask"` ou `"mid"` avec
-`load_parquet` ou `agreger_tick`. Le chargement par lots est disponible pour
-les fichiers locaux via `load_parquet(..., batch_size=...)` ; le CLI ne
-propose pas actuellement ces paramètres.
+`load_parquet` ou `agreger_tick`. La lecture par lots est disponible pour les
+fichiers locaux via `load_parquet(..., batch_size=...)`, mais tous les lots
+sont conservés puis concaténés avant agrégation. `batch_size` ne borne donc
+pas la mémoire totale. Dimensionner sur la taille décompressée complète et
+réserver une marge pour les copies intermédiaires et le résultat agrégé. Le
+CLI ne propose pas actuellement ces paramètres.
 
 ### Options disponibles
 
@@ -91,12 +101,13 @@ propose pas actuellement ces paramètres.
 | `--show-config` | Non | `false` | Affiche les valeurs effectives, leur provenance et leur hash, sans données ni export ; nécessite méthodes et timeframes. |
 | `--profile` | Non | `default` | Nom court d'un profil embarqué (`default`, `eurusd`, ...) ou chemin vers un fichier YAML. Le résolveur applique défauts et surcharges selon le [contrat de configuration](./config.md). |
 | `--list-profiles` | Non | `false` | Liste les profils embarqués disponibles puis quitte. Aucun argument de pipeline requis dans ce mode. |
+| `--list-methods` | Non | `false` | Liste les méthodes enregistrées puis quitte. Aucun argument de pipeline requis dans ce mode. |
 | `--allow-lookahead` | Non | `false` | Autorise globalement le lookahead pour toutes les méthodes. |
 | `--allow-lookahead-override` | Non | `{}` | Autorisation ciblée par méthode, ex. `hmm_gaussian:true,price_action:true,mss_choch:true`. |
 | `--method-params` | Non | `{}` | Surcharges d'hyperparamètres au format JSON, ex. `'{"atr_volatility": {"n_atr": 20}}'`. |
 | `--output` | Oui* | — | Répertoire de destination des fichiers exportés. |
 
-\* En mode exécution normale. Avec `--list-profiles`, les arguments `--url`, `--timeframe`, `--methods` et `--output` ne sont pas requis.
+\* En mode exécution normale. Avec `--list-profiles` ou `--list-methods`, les arguments `--url`, `--timeframe`, `--methods` et `--output` ne sont pas requis.
 
 ### Profils de configuration
 

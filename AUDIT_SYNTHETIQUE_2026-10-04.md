@@ -2,8 +2,10 @@
 
 **Date :** 4 octobre 2026. **Révision auditée :** [1f73f32](https://github.com/djamraouf-star/regim_lib/commit/1f73f32ba2b6888d634d25b7f0ab373d14c97c08).
 
-**Suivi mis à jour :** 7 octobre 2026. La présente livraison clôture I24
-avec la stratification intégrée à Study. Les corrections antérieures sont
+**Suivi mis à jour :** 7 octobre 2026. La présente livraison clôture M2/M4
+avec la limite mémoire documentée et la centralisation de la version et de
+l'inventaire. I24 est clôturé avec la stratification intégrée à Study.
+Les corrections antérieures sont
 versionnées dans [0fa3949](https://github.com/djamraouf-star/regim_lib/commit/0fa3949),
 qui complète la révision
 [2293bda](https://github.com/djamraouf-star/regim_lib/commit/2293bda).
@@ -18,25 +20,31 @@ Les huit étapes livrées du chantier `study` ne correspondent pas aux six étap
 de l'audit global : elles ont avancé les étapes globales 4 à 6, sans terminer
 la causalité des détecteurs (étape 3).
 
-**Bilan : 24 corrigés dans le périmètre indiqué, 1 partiel, 10 ouverts.**
+**Bilan : 26 corrigés dans le périmètre indiqué, 1 partiel, 8 ouverts.**
 Ce décompte n'est pas un pourcentage de travail : les constats se recoupent et
 leurs efforts restants diffèrent. « Corrigé » ne vaut pas validation empirique.
 
-**Dernière validation exécutée (7 octobre 2026) :** 566 tests réussis sur la
+**Dernière validation exécutée (7 octobre 2026) :** 579 tests réussis sur la
 suite complète, sans exclusion (`.venv/bin/python -m pytest -o addopts='' -q`).
 Les 18 nouveaux cas de [stratification](./tests/test_study_stratification.py)
 remplacent les deux tests orphelins du script EURUSD (qui étaient auparavant
 exclus des 548 tests exécutables). Ils vérifient notamment l'isolation entre
 sessions, les horizons, les interruptions temporelles, la famille BY globale,
 les contrats de contexte, tous les folds, les exports et la traçabilité.
+Les 12 cas supplémentaires de [buckets VPIN](./tests/test_vpin_buckets.py)
+couvrent le fractionnement, les frontières, les volumes nuls et très grands,
+une référence indépendante par unités de volume et la causalité.
 Un avertissement joblib sur les cœurs physiques subsiste. La validation
 d'installation autonome antérieure reste détaillée avec I26 ; la wheel n'a
 pas été reconstruite pour cette modification. Aucun résultat empirique
 n'est déduit de ces tests.
 
-**Changements observables :** VPIN utilise désormais les seuls buckets antérieurs
-clos, avec un retard d'un bucket. Cette correction apparue pendant le chantier
-a été conservée et vérifiée sur préfixes/prolongements/futurs perturbés.
+**Changements observables :** VPIN fractionne maintenant les lignes entre des
+buckets de volume fixe et publie la moyenne des derniers buckets clos à la
+ligne courante. Le reliquat incomplet reste en attente ; aucun bucket vide
+n'est créé lors d'un saut de volume. La chauffe se termine après n_buckets
+buckets clos, sans décalage supplémentaire. La mémoire est bornée à la fenêtre.
+Les scores historiques doivent être régénérés.
 Les nouveaux exports sont disponibles à clôture ; les anciens parquets VPIN sans
 métadonnées restent exclus du mode causal. Le succès z sur dd signifie une
 excursion moins négative. Les parquets portent disponibilité et sémantique.
@@ -45,7 +53,7 @@ excursion moins négative. Les parquets portent disponibilité et sémantique.
 
 | Réf. | Statut | Correction livrée / preuve et reste à faire |
 |---|---|---|
-| C1 | Corrigé | Moyenne glissante décalée d’un bucket : seules les valeurs des buckets antérieurs clos sont publiées. Huit préfixes, prolongements et futurs perturbés vérifiés, avec référence numérique dans [les tests](./tests/test_audit_completion.py). La fidélité du proxy et les buckets non fractionnés restent I12. |
+| C1 | Corrigé | Publication des seuls buckets fractionnés clos à date, sans réattribution historique. Préfixes, prolongements et futurs perturbés vérifiés dans [les tests existants](./tests/test_audit_completion.py) et [les références de fractionnement](./tests/test_vpin_buckets.py). La fidélité du proxy reste I12. |
 | C2 | Corrigé | Identité, agrégation au timeframe des régimes et alignement strict : [tests du contrat](./tests/test_comparison_contract.py), [entrées study](./tests/test_study_input_contract.py). Horizons en barres uniquement ; durées explicites non implémentées. |
 | C3 | Corrigé | Sélection actif/timeframe/configuration et rejet des doublons : [validation](./regime_lib/study/validation.py), [tests](./tests/test_study_input_contract.py). Comparaison simultanée de deux configurations d'une même méthode hors interface actuelle. |
 | C4 | Corrigé | Types explicites, Spearman non applicable au nominal et rapport adapté : [tests des métriques](./tests/test_study_metric_contract.py), [régressions](./tests/test_study_audit_regressions.py). Ne clôture pas les cinq mesures communes. |
@@ -66,7 +74,7 @@ excursion moins négative. Les parquets portent disponibilité et sémantique.
 | I9 | Ouvert | Pivots rétrospectifs conservés. Distinguer observation, confirmation et révision ; variante causale à événements et tests au futur à livrer. |
 | I10 | Ouvert | HMM rétrospectif conservé. Apprentissage sur train, filtrage avant, caractérisation des états et diagnostics à livrer. |
 | I11 | Ouvert | Machine à états de confirmation MSS/CHOCH ou renommage explicite de la variante simplifiée à réaliser. |
-| I12 | Ouvert | Clarifier données/formules des proxys OFI/VPIN et renommer, ou implémenter les indicateurs correspondants ; distinct de la fuite C1. |
+| I12 | Ouvert | Fractionnement des buckets VPIN livré et testé ; absence de buckets vides et mémoire bornée. Restent à clarifier données/formules des proxys OFI/VPIN et renommer, ou implémenter les indicateurs correspondants ; distinct de la fuite C1. |
 | I13 | Ouvert | Amorçage ADX à vérifier sur référence numérique indépendante ; corriger ou documenter la variante de Wilder. |
 | I14 | Corrigé | NaN OHLC rejetés à l'entrée publique : [validation](./regime_lib/utils/validation.py), [tests](./tests/test_comparison_contract.py). Le cumul interne Kaufman ne reprend pas après un NaN injecté hors contrat public. |
 | I15 | Ouvert | dd/ru toujours sur close dans [targets](./regime_lib/study/targets.py). Restent nommage excursion/drawdown, MFE/MAE high/low long/short et temps jusqu'aux extrêmes. |
@@ -87,9 +95,9 @@ excursion moins négative. Les parquets portent disponibilité et sémantique.
 | Réf. | Statut | Correction livrée / preuve et reste à faire |
 |---|---|---|
 | M1 | Corrigé | Rapport multi-labels, transitions adjacentes et épisodes interrompus par inconnus/trous : [tests](./tests/test_study_descriptive.py). |
-| M2 | Ouvert | Agréger progressivement ou documenter que le chargeur accumule les lots avant concaténation. |
+| M2 | Corrigé — limite documentée | Le chargeur lit par lots mais les accumule avant concaténation puis agrégation ; `batch_size` ne borne pas la mémoire totale. Limite et précaution d'usage documentées dans le [README](./README.md), le [guide CLI](./regime_lib/doc/cli.md) et les docstrings du chargeur. |
 | M3 | Corrigé | Exports dupliqués et auto-import retirés de methods ; masques VPIN/Volume Profile délégués au calendrier commun ; arguments high/low et variable de pivots inutilisés retirés du classificateur MSS/CHOCH. Ancien rapport dupliqué déjà supprimé. |
-| M4 | Ouvert | Guides enrichis, mais versions/inventaire à centraliser. Les passages anciens de study sur la robustesse statistique ont été réconciliés. |
+| M4 | Corrigé | Version unique dans [`_version.py`](./regime_lib/_version.py), reprise par le package, les métadonnées de distribution et Sphinx. L'inventaire des méthodes vient du registre et s'affiche avec `--list-methods` ; le README et le guide CLI renvoient à cette source. Le guide volume reflète les méthodes implémentées et figure dans l'index documentaire. |
 
 ### Ordre de reprise et critères de clôture
 
@@ -110,8 +118,8 @@ les périodes et les critères avant l'analyse finale.
 5. **C5 — confirmation.** Réserver une période indépendante et figer les choix
    avant consultation. Les tests synthétiques ne constituent pas cette preuve.
 
-I11–I13 restent un chantier distinct de fidélité des indicateurs. M2/M4 restent
-ouverts. Les constats historiques ci-dessous ne sont pas les statuts actuels.
+I11–I13 restent un chantier distinct de fidélité des indicateurs. Les constats
+historiques ci-dessous ne sont pas les statuts actuels.
 
 ## Historique — chantier YAML du 5 octobre, désormais livré dans 2293bda
 

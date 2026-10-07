@@ -242,8 +242,9 @@ def charger_tick(
         Seuil relatif (fraction du prix) → UserWarning. Exclusif avec
         `saut_max`.
     batch_size : int, optional
-        Si fourni, chargement par lots (streaming). Recommandé pour les
-        fichiers > 1 Go. Défaut : chargement complet en mémoire.
+        Taille des lots lus depuis un parquet local. Les lots sont ensuite
+        accumulés et concaténés en mémoire : ce paramètre réduit la mémoire
+        de lecture transitoire, mais ne borne pas la mémoire totale.
 
     Returns
     -------
@@ -344,7 +345,7 @@ def _charger_tick_par_lots(
     path: Path,
     batch_size: int = 1_000_000,
 ) -> pd.DataFrame:
-    """Charge un parquet tick local en streaming par lots."""
+    """Lit un parquet tick local par lots, puis matérialise tous les ticks."""
     parquet = pq.ParquetFile(path)
     if batch_size <= 0:
         raise ValueError("batch_size doit être strictement positif.")
@@ -547,8 +548,9 @@ def load_parquet(
         Côté de prix pour l'agrégation tick (défaut "bid"). Ignoré pour
         les barres.
     batch_size : int | None
-        Taille de lot pour le streaming des ticks (local uniquement).
-        Recommandé > 10 M ticks.
+        Taille des lots lus pour les ticks (local uniquement). Les lots
+        restent accumulés avant concaténation et agrégation ; cela ne borne
+        pas la mémoire totale. Voir `charger_tick`.
 
     Returns
     -------

@@ -1,8 +1,8 @@
 # Volume — méthodes basées sur le volume
 
-**Dernière mise à jour** : 2026-10-03
+**Dernière mise à jour** : 2026-10-07
 **Famille** : `methods/volume/`
-**Statut** : `ofi` et `divergence_pv` implémentées
+**Statut** : `ofi`, `divergence_pv`, `vpin` et `volume_profile` implémentées
 
 ---
 
@@ -47,8 +47,8 @@ l'activité mondiale.
 
 - **OFI** : interprétable comme proxy de pression côté Dukascopy.
 - **Divergence prix/volume** : populaire mais peu validée statistiquement.
-- **VPIN** (à venir) : fondement théorique faible sur forex décentralisé.
-- **Volume profile** (à venir) : moins fiable que sur futures.
+- **VPIN** : fondement théorique faible sur forex décentralisé.
+- **Volume profile** : moins fiable que sur futures.
 
 ### 2.3 Alternative robuste : `tick_count`
 
@@ -123,18 +123,37 @@ absentes.
 
 **Confidence** : 0.5 (NEUTRE), 0.6 (CONFIRMATION), 0.7 (DIVERGENCE).
 
-## 4. Méthodes à venir
+## 4. Autres méthodes de volume
 
 ### 4.1 `vpin` — Volume-Synchronized Probability of Informed Trading
 
-Mesure la **toxicité du flux** (Easley, López de Prado, O'Hara 2012).
-Nécessite un **échantillonnage par volume** (bucket bars) et non par
-temps. Coût de calcul élevé.
+Le détecteur utilise `bid_volume` et `ask_volume` comme **proxy exploratoire**
+de déséquilibre des cotations. Ces données ne représentent pas des volumes
+exécutés ; ce score ne certifie pas une probabilité de flux informé.
 
-**Fondement théorique faible sur forex décentralisé.** À traiter comme
-exploratoire.
+Chaque ligne est fractionnée proportionnellement entre des buckets de volume
+`bucket_volume`. Le ratio de déséquilibre absolu de la ligne est supposé
+uniforme sur ses fractions. Le score est la moyenne des `n_buckets` derniers
+buckets **clos à la clôture de la ligne**. Le bucket incomplet reste en attente,
+et aucune valeur n'est réattribuée aux lignes antérieures. Le déséquilibre
+reste la somme des déséquilibres absolus fractionnés, pas la valeur absolue
+d'un solde signé : le fractionnement ne transforme pas le proxy en VPIN canonique.
 
-Effort estimé : 3–4 h.
+Exemple : une ligne de volume 250 et un bucket de 100 ferment deux buckets et
+laissent un reliquat de 50. Il n'y a aucun bucket vide. La chauffe se termine
+dès que `n_buckets` buckets sont clos ; une seule ligne peut suffire. Une ligne
+de volume nul conserve le dernier score disponible (ou `INCONNU` pendant la
+chauffe). Les barres partielles restent masquées dans les sorties.
+
+La mémoire des buckets est bornée à `n_buckets`, indépendamment du volume
+cumulé. Les buckets entiers identiques d'une très grosse ligne sont traités en
+bloc. Les divisions proches d'une frontière sont arrondies avec une tolérance
+de huit epsilons machine en unités de bucket.
+
+**Migration :** régénérer les sorties VPIN pour obtenir les buckets fractionnés.
+Les scores peuvent changer par rapport à l'ancien décalage d'un bucket,
+notamment aux frontières et pour les gros volumes. Les anciens parquets sans
+métadonnées restent exclus des études causales.
 
 ### 4.2 `volume_profile` — Zones de valeur
 
@@ -147,14 +166,19 @@ Sur une fenêtre glissante, histogramme du volume par niveau de prix. La
 | `HORS_ZONE_HAUTE` | `close > P80` |
 | `HORS_ZONE_BASSE` | `close < P20` |
 
-Effort estimé : 2–3 h.
+La méthode est implémentée dans `methods/volume/volume_profile.py`. Elle
+approxime la répartition du volume d'une barre uniformément sur les bins de
+prix qu'elle traverse ; ce n'est pas un profil basé sur des transactions
+individuelles.
 
 ## 5. Causalité
 
-Les deux méthodes implémentées sont **causales par construction** :
-fenêtres strictement passées, aucune fuite du futur.
+Les méthodes `ofi`, `divergence_pv` et `volume_profile` sont **causales par
+construction** : elles utilisent uniquement les données présentes ou passées.
+VPIN publie les buckets clos à la clôture de la ligne courante, sans révision
+des lignes précédentes.
 
-Test de non-fuite validé sur les deux (`test_no_future_leak_by_truncation`).
+Les tests de non-fuite par troncature couvrent les méthodes correspondantes.
 
 ## 6. Configuration YAML
 
@@ -171,7 +195,18 @@ ofi:
   seuil_pression: 0.1
 
 divergence_pv:
-  timeframes:
-    M1:  {fenetre_extreme: 20, fenetre_median_vol: 50}
-    H1:  {fenetre_extreme: 20, fenetre_median_vol: 50}
+  fenetre_extreme: 20
+  fenetre_median_vol: 50
   ratio_volume_fort: 1.5
+
+vpin:
+  bucket_volume: 10000.0
+  n_buckets: 50
+  seuil_bas: 0.20
+  seuil_haut: 0.40
+
+volume_profile:
+  fenetre: 100
+  n_bins: 40
+  pct_bas: 0.20
+  pct_haut: 0.80

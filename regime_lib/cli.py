@@ -198,7 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Détection de régimes de marché multi-méthodes.",
     )
     # Arguments du pipeline : non requis au niveau argparse pour permettre
-    # à --list-profiles de fonctionner seul. La validation est faite
+    # aux options de liste de fonctionner seules. La validation est faite
     # manuellement dans run().
     parser.add_argument("--url", default=None,
                         help="URL locale ou distante du parquet OHLCV.")
@@ -236,6 +236,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-profiles",
         action="store_true",
         help="Liste les profils disponibles et quitte.",
+    )
+    parser.add_argument(
+        "--list-methods",
+        action="store_true",
+        help="Liste les méthodes enregistrées et quitte.",
     )
     parser.add_argument("--show-config", action="store_true",
                         help="Affiche paramètres effectifs, provenance et hash sans lire de données.")
@@ -540,6 +545,12 @@ def main(argv: Iterable[str] | None = None) -> int:
         print("Profils disponibles :")
         for p in profils:
             print(f"  - {p}")
+        return 0
+
+    if args.list_methods:
+        print("Méthodes disponibles :")
+        for name in sorted(METHOD_REGISTRY):
+            print(f"  - {name}")
         return 0
 
     try:

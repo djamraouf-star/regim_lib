@@ -73,9 +73,13 @@ peut avoir une couverture de 100 % tout en contenant une barre source partielle.
 Une dernière barre complète n'est pas marquée partielle artificiellement.
 
 Les ticks sont agrégés en barres M1 avant le resampling vers le ou les
-timeframes demandés. Le chargement d'un Parquet local peut être traité par
-lots par l'API Python (`load_parquet(..., batch_size=...)`). Si `--asset`
-n'est pas fourni, le symbole est inféré du nom de fichier.
+timeframes demandés. Pour un Parquet local, l'API Python accepte
+`load_parquet(..., batch_size=...)` pour lire les ticks par lots. Les lots
+sont toutefois accumulés et concaténés avant l'agrégation : `batch_size`
+réduit la mémoire de lecture transitoire, mais ne borne pas la mémoire totale.
+Dimensionner sur la taille décompressée complète et réserver une marge pour
+les copies intermédiaires et le résultat agrégé. Si `--asset` n'est pas
+fourni, le symbole est inféré du nom de fichier.
 
 Timeframes pris en charge : `M1`, `M5`, `M15`, `M30`, `H1`, `H4`, `D1`,
 `W1`.
@@ -131,15 +135,14 @@ Voir [les priorités et la migration des profils](./regime_lib/doc/config.md).
 Utiliser
 `regime-lib --help` pour la liste complète des options.
 
-## Méthodes disponibles
+## Inventaire des méthodes
 
-- `atr_volatility`
-- `er_kaufman`
-- `adx`
-- `price_action` (offline, lookahead requis)
-- `mss_choch` (offline, lookahead requis)
-- `hmm_gaussian` (offline, lookahead requis)
-- `minkowski_causal`
+Le registre chargé à l'exécution fait foi pour la liste des méthodes. Pour
+afficher l'inventaire complet et à jour :
+
+```bash
+regime-lib --list-methods
+```
 
 ## Documentation
 
@@ -151,6 +154,7 @@ Utiliser
 - [Méthode MSS / CHOCH](./regime_lib/doc/mss_choch.md)
 - [Module d'étude](./regime_lib/doc/study.md)
 - [Référence CLI et rapport](./regime_lib/doc/cli.md)
+- [Méthodes basées sur le volume](./regime_lib/doc/volume.md)
 - [Notes de recherche](./regime_lib/doc/research/index.md)
 - [Documentation complète](./regime_lib/doc/index.md)
 

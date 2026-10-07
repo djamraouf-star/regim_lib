@@ -11,16 +11,10 @@ Contenu exposé
   calendrier, événements) — voir `regime_lib.context`.
 - `__version__` : version de la bibliothèque.
 
-Familles de méthodes
+Méthodes disponibles
 --------------------
-- `volatility` : atr_volatility
-- `trend` : er_kaufman, adx
-- `statistical` : hmm_gaussian
-- `price` : price_action, mss_choch
-- `misc` : minkowski_causal
-- `entropy` : shannon
-- `vector` : pca_axis
-- `volume` : ofi, divergence_pv
+Le registre `regime_lib.core.registry.METHOD_REGISTRY` est la source de
+vérité de l'inventaire. Utiliser `regime-lib --list-methods` pour l'afficher.
 
 Note sur les imports
 --------------------
@@ -43,9 +37,7 @@ from regime_lib.context import enrichir_contexte  # noqa: F401
 
 # Module d'étude (évaluation de la valeur prédictive)
 from regime_lib.study import Study  # noqa: F401
-
-
-__version__ = "0.2.0"
+from regime_lib._version import __version__
 
 __all__ = [
     "RegimeDetector",

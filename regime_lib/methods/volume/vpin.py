@@ -5,10 +5,11 @@ Définition
 ----------
 Échantillonnage par **buckets de volume constant** (et non par temps) :
 
-    bucket_id(t)   = floor( Σ_{s≤t} (bid_vol + ask_vol) / bucket_volume )
-    VPIN_bucket(b) = Σ_{i∈b} |ask_vol_i − bid_vol_i| / Σ_{i∈b} (bid_vol_i + ask_vol_i)
-    VPIN(t)        = moyenne glissante de VPIN_bucket sur n_buckets,
-                     décalée d'un bucket (buckets complets uniquement)
+    Chaque ligne est fractionnée proportionnellement entre des buckets
+    de volume bucket_volume. Son ratio |ask_vol − bid_vol| / volume
+    est supposé uniforme sur les fractions.
+    VPIN_bucket = somme des déséquilibres absolus fractionnés / bucket_volume
+    VPIN(t) = moyenne des n_buckets derniers buckets clos à la ligne t.
 
 Interprétation sur forex
 ------------------------
@@ -31,12 +32,11 @@ Mesure exposée
 
 Causalité
 ---------
-Une ligne du bucket b ne reçoit que la valeur lissée des buckets complets
-≤ b-1 (décalage d'un bucket après la moyenne glissante). Le bucket courant,
-encore incomplet, n'est jamais utilisé : il n'y a plus de réattribution
-rétrospective de la valeur finale d'un bucket à ses lignes. La valeur sur un
-préfixe de la série est identique à celle sur la série complète.
-Conséquences : chauffe de n_buckets + 1 buckets, retard d'un bucket de volume.
+Les buckets sont remplis dans l'ordre des observations. Seuls les buckets
+clos à la clôture de la ligne courante contribuent au score ; le reliquat
+incomplet est conservé pour la suite. Aucune valeur n'est réattribuée aux
+lignes antérieures. La chauffe dure jusqu'à la clôture de n_buckets buckets.
+Une ligne volumineuse peut clore plusieurs buckets et terminer la chauffe.
 Les anciens parquets sans métadonnées restent exclus des études causales :
 ils peuvent provenir de la version avec réattribution historique (constat C1).
 
@@ -50,6 +50,9 @@ from __future__ import annotations
 
 from regime_lib.utils.validation import validated_detector
 
+from collections import deque
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -59,6 +62,62 @@ from regime_lib.core.registry import register_method
 
 
 from regime_lib.core.temporal import unaligned_mask
+
+
+def _closed_bucket_values(total, imbalance, bucket_volume, window):
+    """Remplit des buckets fixes ; mémoire bornée à la fenêtre, même pour un gros tick."""
+    if not np.isfinite(total).all():
+        raise ValueError("Le volume total bid + ask doit rester fini.")
+    values = np.full(len(total), np.nan)
+    closed = deque(maxlen=window)
+    rolling_sum = 0.0
+    filled = 0.0  # Fraction du bucket courant, entre 0 et 1.
+    partial = 0.0  # Déséquilibre fractionné, normalisé par bucket_volume.
+    tolerance = 8 * np.finfo(float).eps
+
+    def publish(score):
+        nonlocal rolling_sum
+        if len(closed) == window:
+            rolling_sum -= closed[0]
+        closed.append(score)
+        rolling_sum += score
+
+    for i, volume in enumerate(total):
+        if volume > 0:
+            units = float(volume / bucket_volume)
+            if not math.isfinite(units):
+                raise ValueError("Rapport volume / bucket_volume trop grand.")
+            ratio = float(imbalance[i] / volume)
+            if filled:
+                needed = 1.0 - filled
+                if units < needed and needed - units > tolerance:
+                    filled += units
+                    partial += units * ratio
+                    units = 0.0
+                else:
+                    partial += needed * ratio
+                    publish(float(np.clip(partial, 0.0, 1.0)))
+                    units = max(0.0, units - needed)
+                    filled = partial = 0.0
+            # Les buckets entiers contenus dans la même ligne ont le même ratio.
+            # Au-delà de la fenêtre, inutile de les matérialiser un à un.
+            if units > 0:
+                whole = math.floor(units)
+                remainder = units - whole
+                if 1.0 - remainder <= tolerance:
+                    whole += 1
+                    remainder = 0.0
+                if whole >= window:
+                    closed = deque([ratio] * window, maxlen=window)
+                    rolling_sum = ratio * window
+                else:
+                    for _ in range(whole):
+                        publish(ratio)
+                filled = remainder
+                partial = remainder * ratio
+        if len(closed) == window:
+            values[i] = np.clip(rolling_sum / window, 0.0, 1.0)
+    return values
 
 
 @register_method
@@ -85,7 +144,7 @@ class VpinDetector(RegimeDetector):
     availability = 'bar_close'
     legacy_availability = 'retrospective'
     regime_dimension = 'quote_toxicity_proxy'
-    regime_description = 'Proxy sur cotations ; valeur des seuls buckets antérieurs clos.'
+    regime_description = 'Proxy sur cotations ; buckets fractionnés clos à date.'
     REGIME_MAP = {
         "CALME": 0,
         "NORMAL": 1,
@@ -148,39 +207,9 @@ class VpinDetector(RegimeDetector):
         total = bid_vol + ask_vol
         imbalance = np.abs(ask_vol - bid_vol)
 
-        # --- Bucketisation volume-clock -------------------------------
-        # bucket_id(t) = floor(cum_total(t) / bucket_volume)
-        cum_total = np.cumsum(total)
-        bucket_id = np.floor(
-            cum_total / self.bucket_volume
-        ).astype(np.int64)
-
-        n_buckets_total = int(bucket_id[-1]) + 1
-
-        # Agrégation des imbalances par bucket
-        sum_imb = np.zeros(n_buckets_total, dtype=float)
-        sum_tot = np.zeros(n_buckets_total, dtype=float)
-        np.add.at(sum_imb, bucket_id, imbalance)
-        np.add.at(sum_tot, bucket_id, total)
-
-        with np.errstate(divide="ignore", invalid="ignore"):
-            vpin_bucket = np.where(
-                sum_tot > 0, sum_imb / sum_tot, np.nan
-            )
-
-        # --- Moyenne glissante sur n_buckets --------------------------
-        vpin_serie = pd.Series(vpin_bucket).rolling(
-            self.n_buckets, min_periods=self.n_buckets
-        ).mean()
-
-        # Causalité : une ligne du bucket b ne voit que les buckets
-        # complets <= b-1. Le bucket courant (incomplet) n'est jamais
-        # utilisé, donc le dernier bucket n'a plus besoin d'être invalidé.
-        vpin_bucket_smooth = vpin_serie.shift(1).to_numpy(dtype=float)
-
-        # --- Re-mapping bucket → ligne -------------------------------
-        vpin_row = vpin_bucket_smooth[bucket_id]
-        vpin_row = np.array(vpin_row, dtype=float, copy=True)
+        vpin_row = _closed_bucket_values(
+            total, imbalance, self.bucket_volume, self.n_buckets,
+        )
 
         # --- Classification ------------------------------------------
         ready = ~np.isnan(vpin_row)

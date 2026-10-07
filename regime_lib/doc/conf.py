@@ -15,10 +15,12 @@ from pathlib import Path
 # Permet à autodoc de trouver le package sans installation préalable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from regime_lib._version import __version__
+
 project = "regime_lib"
 author = "Équipe regime_lib"
 copyright = "2026, Équipe regime_lib"
-release = "0.1.0"
+release = __version__
 
 extensions = [
     "sphinx.ext.autodoc",

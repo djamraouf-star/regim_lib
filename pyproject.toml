@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "regime_lib"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Bibliothèque de détection de régimes de marché multi-méthodes."
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
@@ -37,6 +37,9 @@ regime-report = "regime_lib.study.report:main"
 [tool.setuptools.packages.find]
 include = ["regime_lib*"]
 exclude = ["regime_lib.docs*", "tests*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "regime_lib._version.__version__" }
 
 [tool.setuptools.package-data]
 regime_lib = ["config/profiles/*.yaml", "context/data/*.csv"]
