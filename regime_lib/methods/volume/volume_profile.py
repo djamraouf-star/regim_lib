@@ -73,6 +73,8 @@ class VolumeProfileDetector(RegimeDetector):
     """
 
     name = "volume_profile"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Distance relative hors de la zone centrale du profil.'
     availability = 'bar_close'
     regime_dimension = 'value_area'
     regime_description = 'Position dans un histogramme glissant de volume approximé à partir des barres.'

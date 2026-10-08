@@ -73,7 +73,11 @@ def _convention_succes(
     if nom_cible.startswith("ru_fwd_"):
         return (cible > seuil).to_numpy()
 
-    return (cible > 0).to_numpy()
+    from regime_lib.study.targets import parser_cible
+    parser_cible(nom_cible)
+    # Pour les excursions et durées : événement « supérieur à la médiane »,
+    # sans interprétation de performance pour les durées.
+    return (cible > seuil).to_numpy()
 
 # ---------------------------------------------------------------------------
 # Métriques globales

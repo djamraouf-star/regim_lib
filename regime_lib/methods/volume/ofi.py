@@ -70,9 +70,12 @@ class OrderFlowImbalanceDetector(RegimeDetector):
     """
 
     name = "ofi"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Marge du déséquilibre des tailles affichées au seuil.'
     availability = 'bar_close'
     regime_dimension = 'quote_imbalance'
-    regime_description = 'Proxy de déséquilibre des volumes de cotations, pas de transactions exécutées.'
+    indicator_name = 'quote_size_imbalance'
+    regime_description = 'Moyenne du déséquilibre signé (ask_size-bid_size)/(ask_size+bid_size) ; aucune direction de transaction déduite.'
     REGIME_MAP = {
         "PRESSION_ACHETEUSE": 0,
         "PRESSION_VENDEUSE": 1,
@@ -187,3 +190,17 @@ class OrderFlowImbalanceDetector(RegimeDetector):
         out["confidence"] = confidence
         out["ofi_value"] = ofi_v
         return out[["regime", "confidence", "ofi_value"]]
+
+
+@register_method
+class QuoteSizeImbalanceDetector(OrderFlowImbalanceDetector):
+    """Déséquilibre des tailles affichées ; aucune inférence de flux exécuté."""
+    name = "quote_size_imbalance"
+    REGIME_MAP = {"TAILLE_ASK_DOMINANTE": 0, "TAILLE_BID_DOMINANTE": 1,
+                  "EQUILIBRE": 2, "INCONNU": 3}
+
+    def fit_predict(self, df):
+        result = super().fit_predict(df)
+        result["regime"] = result["regime"].replace({
+            "PRESSION_ACHETEUSE": "TAILLE_ASK_DOMINANTE", "PRESSION_VENDEUSE": "TAILLE_BID_DOMINANTE"})
+        return result.rename(columns={"ofi_value": "quote_imbalance"})

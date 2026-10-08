@@ -65,6 +65,12 @@ methodes:
   # ---------------------------------------------------------------------------
   # Statistique
   # ---------------------------------------------------------------------------
+  hmm_causal:
+    n_states: 2
+    n_iter: 100
+    seed: 42
+    train_size: 500
+
   hmm_gaussian:
     n_states: 2
     n_iter: 100
@@ -73,10 +79,18 @@ methodes:
   # ---------------------------------------------------------------------------
   # Prix
   # ---------------------------------------------------------------------------
+  price_action_causal:
+    n_fractale: 5
+    k_atr: 0.5
+    n_atr_tol: 14
+
   price_action:
     n_fractale: 5
     k_atr: 0.5
     n_atr_tol: 14
+
+  retrospective_pivot_breakout:
+    n_fractale: 5
 
   mss_choch:
     n_fractale: 5
@@ -128,6 +142,12 @@ methodes:
   #
   # Rappel : le volume Dukascopy est une mesure de profondeur observée,
   # pas un volume exécuté. Voir `doc/volume.md`.
+  quote_size_imbalance:
+    fenetre: 20
+    timeframes:
+      D1: {fenetre: 10}
+    seuil_pression: 0.1
+
   ofi:
     fenetre: 20
     timeframes:
@@ -140,6 +160,12 @@ methodes:
     timeframes:
       D1: {fenetre_median_vol: 30}
     ratio_volume_fort: 1.5
+
+  quote_absolute_imbalance_buckets:
+    bucket_volume: 10000.0
+    n_buckets: 50
+    seuil_bas: 0.20
+    seuil_haut: 0.40
 
   vpin:
     bucket_volume: 10000.0

@@ -7,7 +7,7 @@ Cette méthode utilise du lookahead à deux niveaux :
   1) Normalisation z-score sur toute la série ;
   2) Fit HMM sur toute la série.
 
-Il n'existe pas de version causale qui préserve l'algorithme.
+La variante distincte hmm_causal apprend sur un train fixe puis filtre vers l'avant.
 
 États produits
 --------------
@@ -132,6 +132,8 @@ class HMMGaussianDetector(RegimeDetector):
     """
 
     name = "hmm_gaussian"
+    confidence_kind = 'transformed_posterior'
+    confidence_description = 'Maximum du posterior lissé, transformé de [1/n,1] vers [0.5,1] ; pas une probabilité de succès.'
     availability = 'retrospective'
     regime_dimension = 'latent_state'
     regime_description = 'État latent appris et décodé sur la série entière ; identifiants propres au fit.'

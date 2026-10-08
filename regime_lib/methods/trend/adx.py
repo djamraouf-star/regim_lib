@@ -63,14 +63,27 @@ def _directional_movement(
 
 
 def _wilder_smooth(values: np.ndarray, n: int) -> np.ndarray:
+    """Moyenne initiale de n valeurs, puis récurrence de Wilder.
+
+    Les NaN interrompent la chauffe : une nouvelle fenêtre complète est requise.
     """
-    Lissage de Wilder : EMA avec alpha = 1/n, adjust=False.
-    NaN sur les n-1 premières barres.
-    Note : .tolist() avant np.array pour compatibilité Arrow/pandas 2.x.
-    """
-    s = pd.Series(values).ewm(alpha=1.0 / n, adjust=False).mean()
-    out = np.array(s.tolist(), dtype=float)
-    out[: n - 1] = np.nan
+    out = np.full(len(values), np.nan)
+    count = 0
+    total = 0.0
+    previous = np.nan
+    for i, value in enumerate(values):
+        if not np.isfinite(value):
+            count, total, previous = 0, 0.0, np.nan
+            continue
+        if count < n:
+            count += 1
+            total += value
+            if count == n:
+                previous = total / n
+                out[i] = previous
+        else:
+            previous += (value - previous) / n
+            out[i] = previous
     return out
 
 
@@ -84,21 +97,34 @@ def _compute_adx(
     tr = _true_range(high, low, close)
     plus_dm, minus_dm = _directional_movement(high, low)
 
-    atr_s = _wilder_smooth(tr, n)
-    plus_dm_s = _wilder_smooth(plus_dm, n)
-    minus_dm_s = _wilder_smooth(minus_dm, n)
+    # Convention TA-Lib : somme des n-1 premiers mouvements, puis
+    # récurrence à partir de la barre n. Pas d'arrondi intermédiaire.
+    def smooth_movement(values):
+        result = np.full(len(values), np.nan)
+        if len(values) <= n:
+            return result
+        previous = values[1:n].sum()
+        for i in range(n, len(values)):
+            previous = previous - previous / n + values[i]
+            result[i] = previous
+        return result
+
+    atr_s = smooth_movement(tr)
+    plus_dm_s = smooth_movement(plus_dm)
+    minus_dm_s = smooth_movement(minus_dm)
 
     with np.errstate(divide="ignore", invalid="ignore"):
-        plus_di = np.where(atr_s > 0, 100.0 * plus_dm_s / atr_s, np.nan)
-        minus_di = np.where(atr_s > 0, 100.0 * minus_dm_s / atr_s, np.nan)
+        plus_di = np.where(atr_s > 0, 100.0 * plus_dm_s / atr_s, 0.0)
+        minus_di = np.where(atr_s > 0, 100.0 * minus_dm_s / atr_s, 0.0)
 
+        plus_di[~np.isfinite(atr_s)] = np.nan
+        minus_di[~np.isfinite(atr_s)] = np.nan
         di_sum = plus_di + minus_di
         di_diff = np.abs(plus_di - minus_di)
-        dx = np.where(di_sum > 0, 100.0 * di_diff / di_sum, np.nan)
+        dx = np.where(di_sum > 0, 100.0 * di_diff / di_sum, 0.0)
 
-    adx_series = pd.Series(dx).ewm(alpha=1.0 / n, adjust=False).mean()
-    adx = np.array(adx_series.tolist(), dtype=float)
-    adx[: 2 * n - 1] = np.nan
+    dx[~np.isfinite(atr_s)] = np.nan
+    adx = _wilder_smooth(dx, n)
 
     return plus_di, minus_di, adx
 
@@ -111,6 +137,8 @@ class ADXDetector(RegimeDetector):
     """Détecteur de régimes par ADX de Wilder."""
 
     name = "adx"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Marge aux seuils ADX, transition à 0.5.'
     availability = 'bar_close'
     regime_dimension = 'trend_strength'
     regime_description = 'Force de tendance ADX ; le label ne constitue pas une direction de position.'

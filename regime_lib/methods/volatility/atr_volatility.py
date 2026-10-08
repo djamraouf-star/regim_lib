@@ -91,6 +91,8 @@ class ATRVolatilityDetector(RegimeDetector):
     """
 
     name = "atr_volatility"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Distance ATR aux quantiles historiques.'
     availability = 'bar_close'
     regime_dimension = 'volatility'
     regime_description = 'Niveau de volatilité ATR relatif à ses seuils historiques.'

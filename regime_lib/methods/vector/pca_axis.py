@@ -129,6 +129,8 @@ class PCAAxisDetector(RegimeDetector):
     """Détecteur de régimes par axe principal (PCA glissant)."""
 
     name = "pca_axis"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Marge de la direction PCA au seuil.'
     availability = 'bar_close'
     regime_dimension = 'trajectory_geometry'
     regime_description = 'Géométrie de la fenêtre de prix par axes principaux.'

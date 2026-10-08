@@ -58,6 +58,8 @@ class ERKaufmanDetector(RegimeDetector):
     """Détecteur de régimes par Efficiency Ratio de Kaufman."""
 
     name = "er_kaufman"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Marge du ratio ER aux quantiles historiques.'
     availability = 'bar_close'
     regime_dimension = 'efficiency'
     regime_description = 'Efficience du trajet selon le ratio de Kaufman.'

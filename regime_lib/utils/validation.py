@@ -111,7 +111,7 @@ def validated_detector(method):
         for col in ("is_partial", "is_warmup", "is_valid", "coverage",
                     "source_count", "expected_count"):
             if col in data:
-                if col in result and col == "is_partial":
+                if col in result and col in ("is_partial", "is_warmup"):
                     result[col] = result[col].fillna(True) | data[col].fillna(True)
                 elif col in result and col == "is_valid":
                     result[col] = result[col].fillna(False) & data[col].fillna(False)

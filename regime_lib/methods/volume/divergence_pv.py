@@ -77,6 +77,8 @@ class DivergencePVDetector(RegimeDetector):
     """
 
     name = "divergence_pv"
+    confidence_kind = 'label_constant'
+    confidence_description = 'Constantes par label : neutre 0.5, confirmation 0.6, divergence 0.7.'
     availability = 'bar_close'
     regime_dimension = 'price_volume_divergence'
     regime_description = 'Relation entre variations de prix et volumes.'

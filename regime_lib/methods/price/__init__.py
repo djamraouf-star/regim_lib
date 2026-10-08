@@ -23,3 +23,5 @@ from regime_lib.methods.price import mss_choch  # noqa: F401
 
 # À venir
 # from regime_lib.methods.price import support_resistance  # noqa: F401
+
+from .price_action_causal import PriceActionCausalDetector

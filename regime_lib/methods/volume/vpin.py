@@ -142,10 +142,13 @@ class VpinDetector(RegimeDetector):
     """
 
     name = "vpin"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Marge du proxy de déséquilibre absolu aux seuils.'
     availability = 'bar_close'
     legacy_availability = 'retrospective'
     regime_dimension = 'quote_toxicity_proxy'
-    regime_description = 'Proxy sur cotations ; buckets fractionnés clos à date.'
+    indicator_name = 'quote_absolute_imbalance_buckets'
+    regime_description = 'Moyenne par buckets du déséquilibre absolu des tailles affichées ; aucune mesure de toxicité des transactions.'
     REGIME_MAP = {
         "CALME": 0,
         "NORMAL": 1,
@@ -257,3 +260,19 @@ class VpinDetector(RegimeDetector):
             },
             index=out.index,
         )
+
+
+@register_method
+class QuoteAbsoluteImbalanceDetector(VpinDetector):
+    """Déséquilibre absolu par buckets de tailles affichées, sans toxicité."""
+    name = "quote_absolute_imbalance_buckets"
+    legacy_availability = "bar_close"
+    REGIME_MAP = {"DESEQUILIBRE_FAIBLE": 0, "DESEQUILIBRE_MOYEN": 1,
+                  "DESEQUILIBRE_ELEVE": 2, "INCONNU": 3}
+
+    def fit_predict(self, df):
+        result = super().fit_predict(df)
+        result["regime"] = result["regime"].replace({
+            "CALME": "DESEQUILIBRE_FAIBLE", "NORMAL": "DESEQUILIBRE_MOYEN",
+            "TOXIQUE": "DESEQUILIBRE_ELEVE"})
+        return result.rename(columns={"vpin_value": "quote_absolute_imbalance"})

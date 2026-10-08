@@ -95,7 +95,8 @@ def to_uniform(
         if out.attrs.get(field) is not None:
             out[field] = out.attrs[field]
     for field in ("availability", "regime_dimension", "regime_description",
-                  "regime_scale", "revises_history"):
+                  "regime_scale", "revises_history", "confidence_kind",
+                  "confidence_description", "confidence_calibrated", "indicator_name"):
         if field in out.attrs:
             out[field] = out.attrs[field]
     if "availability" in out.attrs:

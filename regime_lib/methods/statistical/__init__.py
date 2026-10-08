@@ -7,3 +7,5 @@ série). Elles doivent définir `requires_lookahead = True`.
 """
 
 from regime_lib.methods.statistical import hmm_gaussian  # noqa: F401
+
+from .hmm_causal import HMMCausalDetector

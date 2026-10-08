@@ -75,6 +75,8 @@ class MinkowskiCausalDetector(RegimeDetector):
     """
 
     name = "minkowski_causal"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Amplitude relative de la métrique de Minkowski.'
     availability = 'bar_close'
     regime_dimension = 'relative_return'
     regime_description = 'Amplitude relative du rendement selon la métrique déclarée.'

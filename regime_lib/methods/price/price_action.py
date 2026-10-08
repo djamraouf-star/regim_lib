@@ -5,9 +5,8 @@ Détection de régimes par Price Action (fractales strictes + pivots alternés).
 ----------------------------------------
 Cette méthode utilise un lookahead **par construction**. Un sommet fractal
 à l'indice `i` n'est identifiable qu'après avoir observé les `n_fractale`
-barres suivantes. Il n'existe pas de version causale qui préserve la
-méthode : toute tentative de la rendre causale la transforme en un
-détecteur de tendance décalé, ce qui n'est plus du price action.
+barres suivantes. La variante distincte price_action_causal publie les
+événements à confirmation ; elle ne réécrit pas les labels historiques.
 
 Usage prévu :
   - Analyse descriptive a posteriori (post-mortem, annotation de dataset) ;
@@ -205,6 +204,8 @@ class PriceActionDetector(RegimeDetector):
     """
 
     name = "price_action"
+    confidence_kind = 'heuristic_margin'
+    confidence_description = 'Marge des différences de pivots rapportée à la tolérance ATR.'
     availability = 'retrospective'
     regime_dimension = 'price_structure'
     regime_description = 'Structure rétrospective des pivots, révisable.'

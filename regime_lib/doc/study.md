@@ -584,3 +584,7 @@ stratifiée. Le manifeste enregistre l'option, les empreintes du contexte,
 des résultats et de la couverture. Une modification après `run()` exige de
 relancer l'étude avant l'export. Aucun entraînement supplémentaire des détecteurs
 n'est effectué par cette option.
+
+## Compléments techniques du 8 octobre 2026
+
+Voir les [variantes causales, cibles MFE/MAE, calibration explicite et baselines](technical_completion.md).

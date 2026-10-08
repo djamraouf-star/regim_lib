@@ -86,10 +86,18 @@ class RegimeDetector(ABC):
     regime_dimension: ClassVar[str] = "unspecified"
     regime_description: ClassVar[str] = "Sémantique non déclarée."
 
+    confidence_kind: ClassVar[str] = "heuristic_score"
+    confidence_description: ClassVar[str] = "Score propre à la méthode ; non calibré en probabilité."
+    indicator_name: ClassVar[str] = ""
+
     @classmethod
     def interpretation(cls) -> dict:
         """Les labels sont nominaux et ne constituent pas une échelle commune."""
-        return {"availability": cls.availability,
+        return {"confidence_kind": cls.confidence_kind,
+                "confidence_description": cls.confidence_description,
+                "confidence_calibrated": False,
+                "indicator_name": cls.indicator_name or cls.name,
+                "availability": cls.availability,
                 "regime_dimension": cls.regime_dimension,
                 "regime_description": cls.regime_description,
                 "regime_scale": "nominal",

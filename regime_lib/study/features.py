@@ -75,6 +75,8 @@ def lister_features_disponibles(df: pd.DataFrame) -> dict[str, list[str]]:
         "source_count", "expected_count", "source", "price_side", "adjustment",
         "calendar", "timestamp_convention", "availability", "available_at",
         "regime_dimension", "regime_description", "regime_scale", "revises_history",
+        "confidence_kind", "confidence_description", "confidence_calibrated", "indicator_name",
+        "hmm_diagnostics", "pivot_observed_at", "pivot_confirmed_at", "pivot_kind", "pivot_replaces_previous",
     }
     autres = sorted(
         c for c in colonnes

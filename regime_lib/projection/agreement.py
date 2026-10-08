@@ -129,11 +129,25 @@ def comparer_methodes(
     for regimes in methodes.values():
         validate_alignment(regimes.index, segment_id.index)
         shared &= regimes.notna() & regimes.ne("INCONNU")
+    if segment_id.isna().any():
+        raise ValueError("Identifiants de segment manquants.")
     rows: list[dict] = []
     for name, regimes in methodes.items():
         own = regimes.notna() & regimes.ne("INCONNU")
         p = purete_par_segment(regimes.where(shared), segment_id)
+        labels = regimes[shared]
+        segments = segment_id[shared]
+        from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
+        nondegenerate = 1 < labels.nunique() < len(labels) and 1 < segments.nunique() < len(segments)
+        baseline = float(labels.value_counts(normalize=True).max()) if len(labels) else float("nan")
+        purity = purete_globale_ponderee(p)
         rows.append({
+            "baseline_constante": 1.0 if len(labels) else float("nan"),
+            "baseline_majoritaire": baseline,
+            "gain_purete": purity - baseline,
+            "ami": float(adjusted_mutual_info_score(segments, labels)) if nondegenerate else (0.0 if len(labels) else float("nan")),
+            "ari": float(adjusted_rand_score(segments, labels)) if nondegenerate else (0.0 if len(labels) else float("nan")),
+            "partition_degeneree": not nondegenerate,
             "methode": name,
             "n_propre": int(own.sum()),
             "n_commun": int(shared.sum()),
@@ -145,4 +159,5 @@ def comparer_methodes(
         })
     return pd.DataFrame(rows, columns=["methode", "n_propre", "n_commun", "purete_ponderee",
                                        "n_regimes_moy", "purete_min", "purete_max",
-                                       "n_segments_purs"]).set_index("methode")
+                                       "n_segments_purs", "baseline_constante", "baseline_majoritaire",
+                                       "gain_purete", "ami", "ari", "partition_degeneree"]).set_index("methode")

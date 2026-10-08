@@ -9,9 +9,9 @@ Familles supportées
                log(close[t+K] / close[t])
 - `vol_fwd_K` : volatilité réalisée forward
                écart-type des log-returns sur [t, t+K]
-- `dd_fwd_K`  : drawdown forward
+- `dd_fwd_K`  : excursion minimale des clôtures (alias close_min)
                min(close[t:t+K+1]) / close[t] - 1
-- `ru_fwd_K`  : run-up forward
+- `ru_fwd_K`  : excursion maximale des clôtures (alias close_max)
                max(close[t:t+K+1]) / close[t] - 1
 
 Convention de nommage : `<famille>_fwd_<K>`, K entier strictement
@@ -34,9 +34,10 @@ from regime_lib.core.temporal import resolve_timeframe, expected_grid
 from regime_lib.utils.validation import validate_time_index, validity_mask
 
 
-_PATTERN = re.compile(r"^([a-z]+)_fwd_(\d+)$")
+_PATTERN = re.compile(r"^([a-z_]+)_fwd_(\d+)$")
 
-FAMILLES_VALIDES = {"ret", "vol", "dd", "ru"}
+EXCURSIONS = {"mfe_long", "mae_long", "mfe_short", "mae_short"}
+FAMILLES_VALIDES = {"ret", "vol", "dd", "ru", "close_min", "close_max"} | EXCURSIONS | {"time_" + f for f in EXCURSIONS}
 
 
 def parser_cible(nom: str) -> tuple[str, int]:
@@ -113,7 +114,7 @@ def calculer_cible(
         cible = log_ret.shift(-1).rolling(k, min_periods=k).std()
         cible = cible.shift(-(k - 1))
 
-    elif famille == "dd":
+    elif famille in {"dd", "close_min"}:
         # Drawdown : inclut close[t] pour garantir dd ≤ 0
         cible = pd.Series(np.nan, index=close.index, dtype=float)
         arr = close.to_numpy()
@@ -122,7 +123,7 @@ def calculer_cible(
             fenetre = arr[t : t + k + 1]   # inclut close[t]
             cible.iloc[t] = fenetre.min() / arr[t] - 1
 
-    elif famille == "ru":
+    elif famille in {"ru", "close_max"}:
         # Run-up : inclut close[t] pour garantir ru ≥ 0
         cible = pd.Series(np.nan, index=close.index, dtype=float)
         arr = close.to_numpy()
@@ -130,6 +131,35 @@ def calculer_cible(
         for t in range(n - k):
             fenetre = arr[t : t + k + 1]   # inclut close[t]
             cible.iloc[t] = fenetre.max() / arr[t] - 1
+
+    elif famille in EXCURSIONS or famille.startswith("time_"):
+        for column in ("high", "low"):
+            if column not in ohlcv:
+                raise ValueError(f"La cible {nom} requiert {column}.")
+            vals = ohlcv[column].to_numpy(dtype=float)
+            if not np.isfinite(vals).all() or (vals <= 0).any():
+                raise ValueError(f"{column} doit être fini et strictement positif.")
+        if ((ohlcv.high < ohlcv.close) | (ohlcv.low > ohlcv.close)
+                | (ohlcv.high < ohlcv.low)).any():
+            raise ValueError("Relations high/low/close incohérentes.")
+        timed = famille.startswith("time_")
+        kind = famille.removeprefix("time_")
+        use_high = kind in {"mfe_long", "mae_short"}
+        prices = ohlcv["high" if use_high else "low"].reindex(grid).to_numpy()
+        entries = close.to_numpy()
+        result = np.full(len(close), np.nan)
+        for t in range(len(close) - k):
+            # Entrée à close[t] : seuls les extrêmes de t+1 ... t+K
+            # sont accessibles. L'entrée est l'extrême initial (temps zéro).
+            path = np.r_[entries[t], prices[t + 1:t + k + 1]]
+            if not np.isfinite(path).all():
+                continue
+            position = int(np.argmax(path) if use_high else np.argmin(path))
+            value = path[position] / entries[t] - 1
+            if kind.endswith("short"):
+                value = -value  # P&L normalisé par le prix d'entrée
+            result[t] = position if timed else value
+        cible = pd.Series(result, index=grid)
 
     else:  # pragma: no cover — famille validée par parser_cible
         raise ValueError(f"Famille non implémentée : {famille}")

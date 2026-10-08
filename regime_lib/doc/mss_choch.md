@@ -1,3 +1,5 @@
+> Mise à jour du 8 octobre 2026 : consulter les [variantes et conventions actuelles](technical_completion.md). Les développements ci-dessous décrivent la méthode historique rétrospective.
+
 # MSS / CHOCH — Market Structure Shift et Change of Character
 
 **Dernière mise à jour** : 2026-10-02

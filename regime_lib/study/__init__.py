@@ -30,6 +30,7 @@ from regime_lib.study.study import Study
 
 __all__ = [
     "Study",
+    "ConfidenceCalibrator",
     "InferenceConfig",
     "calculer_cible",
     "extraire_features",
@@ -45,3 +46,5 @@ __all__ = [
 ]
 
 from regime_lib.study.inference import InferenceConfig
+
+from .calibration import ConfidenceCalibrator

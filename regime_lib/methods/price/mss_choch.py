@@ -1,45 +1,10 @@
-"""
-Market Structure Shift (MSS) et Change of Character (CHOCH) — style ICT.
+"""Cassures rétrospectives simplifiées de pivots.
 
-Concept
--------
-La structure de marché est définie par les swing highs (sommets) et
-swing lows (creux) :
-
-  - Uptrend   : Higher Highs (HH) + Higher Lows (HL)
-  - Downtrend : Lower Highs (LH) + Lower Lows (LL)
-
-Deux événements marquent les retournements :
-
-- CHOCH (Change of Character) : premier signal de retournement.
-  En uptrend, cassure du dernier HL → CHOCH baissier.
-  En downtrend, cassure du dernier LH → CHOCH haussier.
-
-- MSS (Market Structure Shift) : confirmation du retournement.
-  Après un CHOCH, cassure du swing opposé majeur → MSS confirmé.
-
-Régimes produits
-----------------
-- MSS_HAUSSIER   : cassure haussière confirmée (retournement vers le haut)
-- MSS_BAISSIER   : cassure baissière confirmée
-- CHOCH_HAUSSIER : premier signal haussier (non confirmé)
-- CHOCH_BAISSIER : premier signal baissier (non confirmé)
-- NEUTRE         : structure stable, pas de cassure
-- INCONNU        : chauffe ou barre non clôturée
-
-⚠ MÉTHODE OFFLINE — LOOKAHEAD STRUCTUREL
-----------------------------------------
-Comme `price_action`, cette méthode utilise des fractales dont la
-détection NÉCESSITE n_fractale barres futures. Le flag
-`requires_lookahead = True` empêche l'utilisation accidentelle.
-
-Différence avec `price_action`
-------------------------------
-- `price_action` : classifie un RÉGIME (persistant) → TENDANCE/RANGE/CHOP
-- `mss_choch`    : classe l'état de cassure barre par barre → CHOCH/MSS
-
-Les deux sont complémentaires : un CHOCH signale la fin d'une tendance
-que `price_action` classifiait comme TENDANCE_*.
+Nom descriptif : retrospective_pivot_breakout. L'identifiant mss_choch et
+ses labels sont conservés pour compatibilité. Ils désignent des tests de
+niveaux à chaque barre, pas une séquence CHOCH puis confirmation MSS.
+La méthode ne mémorise aucun état de retournement et révise les pivots.
+Utiliser uniquement pour annotation rétrospective, avec lookahead explicite.
 """
 
 from __future__ import annotations
@@ -70,7 +35,7 @@ def _classify_mss_choch(
     Algorithme :
     1. Construire un index des pivots par indice de barre.
     2. Pour chaque barre t :
-       a. Récupérer les 2 derniers sommets et 2 derniers creux confirmés
+       a. Récupérer les 2 derniers sommets et 2 derniers creux rétrospectifs
           jusqu'à t (via les pivots ayant index <= t).
        b. Déterminer la structure :
           - Uptrend  : S1 > S2 ET C1 > C2
@@ -140,16 +105,19 @@ def _classify_mss_choch(
 @register_method
 class MSSCHOCHDetector(RegimeDetector):
     """
-    Détecteur de retournements MSS/CHOCH (style ICT).
+    Identifiant historique de la classification simplifiée de cassures.
 
     Méthode OFFLINE : utilise du lookahead structurel (détection de
     fractales). Voir docstring module.
     """
 
     name = "mss_choch"
+    confidence_kind = 'label_constant'
+    confidence_description = 'Valeur conventionnelle attachée au label de cassure simplifiée.'
     availability = 'retrospective'
     regime_dimension = 'breakout_event'
-    regime_description = 'Classification simplifiée des cassures sur pivots rétrospectifs.'
+    indicator_name = 'retrospective_pivot_breakout'
+    regime_description = 'Cassures rétrospectives simplifiées de niveaux de pivots ; sans état de confirmation MSS/CHOCH.'
     REGIME_MAP = {
         "MSS_HAUSSIER": 0,
         "MSS_BAISSIER": 1,
@@ -231,3 +199,19 @@ class MSSCHOCHDetector(RegimeDetector):
         out["regime"] = regime
         out["confidence"] = confidence
         return out[["regime", "confidence"]]
+
+
+@register_method
+class RetrospectivePivotBreakoutDetector(MSSCHOCHDetector):
+    """Tests de cassure de niveaux, sans séquence de confirmation."""
+    name = "retrospective_pivot_breakout"
+    REGIME_MAP = {"CASSURE_HAUTE_ANCIENNE": 0, "CASSURE_BASSE_ANCIENNE": 1,
+                  "CASSURE_HAUTE_RECENTE": 2, "CASSURE_BASSE_RECENTE": 3,
+                  "NEUTRE": 4, "INCONNU": 5}
+
+    def fit_predict(self, df):
+        result = super().fit_predict(df)
+        result["regime"] = result["regime"].replace({
+            "MSS_HAUSSIER": "CASSURE_HAUTE_ANCIENNE", "MSS_BAISSIER": "CASSURE_BASSE_ANCIENNE",
+            "CHOCH_HAUSSIER": "CASSURE_HAUTE_RECENTE", "CHOCH_BAISSIER": "CASSURE_BASSE_RECENTE"})
+        return result

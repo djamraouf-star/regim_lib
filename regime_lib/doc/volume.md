@@ -256,3 +256,9 @@ volume_profile:
   n_bins: 40
   pct_bas: 0.20
   pct_haut: 0.80
+
+## Noms publics explicites
+
+Utiliser désormais `quote_size_imbalance` et `quote_absolute_imbalance_buckets`.
+Les noms historiques `ofi` et `vpin` restent compatibles. Les formules exactes,
+labels et limites sont détaillés dans les [compléments techniques](technical_completion.md).
