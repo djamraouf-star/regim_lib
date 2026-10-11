@@ -280,6 +280,9 @@ est déterminée à partir des indicateurs directionnels.
 | `seuil_range` | `20.0` | En dessous de cette valeur, le marché est classé `RANGE` (absence de tendance). |
 | `seuil_tendance` | `25.0` | À partir de cette valeur, l'ADX indique une tendance ; entre les seuils, le régime est `CHOP`. La direction vient des indicateurs directionnels. |
 
+Les trois paramètres sont réglables par timeframe : des seuils absolus
+n'ont de sens que pour une période `n_adx` et un timeframe donnés.
+
 ### `hmm_gaussian`
 
 Le HMM gaussien est une méthode hors ligne qui utilise du lookahead

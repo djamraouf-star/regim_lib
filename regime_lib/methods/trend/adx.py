@@ -153,9 +153,13 @@ class ADXDetector(RegimeDetector):
 
     PARAM_SCHEMA = ParameterSchema(
         parameters={
-            "n_adx": Parameter(int, minimum=2),
-            "seuil_range": Parameter(float, minimum=0, maximum=100, exclusive_min=True, exclusive_max=True),
-            "seuil_tendance": Parameter(float, minimum=0, maximum=100, exclusive_min=True, exclusive_max=True),
+            # Réglables par timeframe : les seuils absolus dépendent de n_adx
+            # et du timeframe (ADX(7) M5 EURUSD 2024 : quantiles 40/60 ≈ 28/35).
+            "n_adx": Parameter(int, minimum=2, per_timeframe=True),
+            "seuil_range": Parameter(float, minimum=0, maximum=100, exclusive_min=True,
+                                     exclusive_max=True, per_timeframe=True),
+            "seuil_tendance": Parameter(float, minimum=0, maximum=100, exclusive_min=True,
+                                        exclusive_max=True, per_timeframe=True),
         },
         constraints=(Ordered("seuil_range", "seuil_tendance"),),
     )

@@ -84,7 +84,7 @@ def test_user_file_named_default_is_not_ignored(tmp_path, extension):
     ({"adx": {"seuil_range": 30}}, "seuil_range < seuil_tendance"),
     ({"shannon": {"timeframes": {"H2": {"fenetre": 20}}}}, "Timeframe inconnu"),
     ({"shannon": {"timeframes": {"M1": {"n_binns": 8}}}}, "n_binns.*n_bins"),
-    ({"adx": {"timeframes": {"H1": {"n_adx": 20}}}}, "par timeframe"),
+    ({"atr_volatility": {"timeframes": {"H1": {"q_low": 0.2}}}}, "par timeframe"),
     ({"atr_volatility": {"fenetre": 20, "min_periods": 21}}, "min_periods <= fenetre"),
     ({"shannon": {"timeframes": []}}, "dictionnaire"),
 ])
@@ -175,3 +175,15 @@ def test_programmatic_profile_validates_methods():
         ProfilConfig(nom="python", methodes={"adx": {"n_adxx": 20}})
     with pytest.raises(ValueError, match="méthode inconnue"):
         load_profile("default").for_method("adxx")
+
+
+def test_adx_parameters_are_timeframe_specific(tmp_path):
+    from regime_lib.methods.trend.adx import ADXDetector
+
+    profil = load_profile(write_profile(tmp_path, {"adx": {"timeframes": {
+        "M5": {"n_adx": 7, "seuil_range": 28.1, "seuil_tendance": 34.6}}}}))
+    m5 = ADXDetector(timeframe="M5", profile=profil.for_method("adx"))
+    h1 = ADXDetector(timeframe="H1", profile=profil.for_method("adx"))
+
+    assert (m5.n_adx, m5.seuil_range, m5.seuil_tendance) == (7, 28.1, 34.6)
+    assert (h1.n_adx, h1.seuil_range, h1.seuil_tendance) == (14, 20.0, 25.0)
