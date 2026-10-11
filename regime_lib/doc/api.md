@@ -2,10 +2,9 @@
 
 Ce document liste les modules documentés automatiquement via Sphinx.
 
-La calibration est [hors du périmètre public à livrer](calibration.md).
-Les références générées depuis le code peuvent encore montrer les prototypes
-historiques : leur retrait du paquet reste à réaliser. Leur présence dans
-l'autodocumentation ne constitue pas un engagement de livraison.
+La calibration est [hors du périmètre de l'API](calibration.md) : aucun
+module de calibration n'est exporté. La page de calibration donne des
+exemples réalisables avec les fonctions documentées ici.
 
 ```{eval-rst}
 .. autosummary::

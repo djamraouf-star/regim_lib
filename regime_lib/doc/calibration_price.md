@@ -17,5 +17,5 @@ Les scores constants par label et les annotations rétrospectives nécessitaient
 recherche, sans méthode imposée aux utilisateurs ni validation générale.
 
 Aucun moteur, protocole ou fonction de calibration propre à cette famille
-n'est prévu dans la version publique. Les prototypes présents dans le dépôt
-sont historiques ; cette mise à jour documentaire ne les retire pas du code.
+n'est prévu dans la version publique. Les prototypes ont été retirés du
+dépôt le 11 octobre 2026.

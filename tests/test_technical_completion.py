@@ -11,7 +11,6 @@ from regime_lib.methods.trend.adx import _compute_adx
 from regime_lib.methods.price.price_action_causal import PriceActionCausalDetector
 from regime_lib.methods.statistical.hmm_causal import HMMCausalDetector, filter_forward
 from regime_lib.study.targets import calculer_cible
-from regime_lib.study.calibration import ConfidenceCalibrator
 from regime_lib.projection.agreement import comparer_methodes
 from regime_lib.core.registry import METHOD_REGISTRY
 from regime_lib.core.output import to_uniform
@@ -129,26 +128,6 @@ def test_hmm_train_only_and_prefixes():
     means=full.attrs["hmm_diagnostics"]["state_means"]
     assert means[0][0]<=means[1][0]
 
-
-def test_calibration_reference_and_purge():
-    index=bars(12).index
-    scores=pd.Series([.1,.2,.8,.9],index=index[:4])
-    outcomes=pd.Series([0,0,1,1],index=scores.index)
-    ends=pd.Series(index[2:6],index=scores.index)
-    calibrator=ConfidenceCalibrator("ret_fwd_2 > 0").fit(scores,outcomes,target_end=ends)
-    with pytest.raises(ValueError,match="purge"):
-        calibrator.predict(pd.Series([.5],index=index[5:6]))
-    test_scores=pd.Series([.1,.9,.1,.9],index=index[6:10])
-    labels=pd.Series([0,1,0,1],index=test_scores.index)
-    report=calibrator.evaluate(test_scores,labels)
-    assert report["brier"]==0
-    assert report["baseline_brier"]==.25
-    assert report["brier_skill"]==1
-    assert report["ece"]==0
-    # Modifier les issues du test change l'évaluation, jamais le calibrateur.
-    before=calibrator.predict(test_scores)
-    assert calibrator.evaluate(test_scores,1-labels)["brier"]==1
-    pd.testing.assert_series_equal(before,calibrator.predict(test_scores))
 
 
 def test_interpretation_export(tmp_path):

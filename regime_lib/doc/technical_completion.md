@@ -102,10 +102,11 @@ ne deviennent pas comparables en probabilité par simple normalisation dans
 [0,1]. Ils mesurent selon la méthode une marge, une constante par label,
 un posterior transformé ou la probabilité filtrée d'un état latent.
 
-Un prototype isotone a été développé lors des compléments techniques du
-8 octobre 2026. Il appartient à l'historique des travaux, et non au périmètre
-public à livrer. Ses tests synthétiques ne valident pas une calibration sur
-marché. Les exports historiques existent encore dans le code à cette date.
+Un prototype isotone (`ConfidenceCalibrator`) a été développé lors des
+compléments techniques du 8 octobre 2026, puis retiré du paquet le
+11 octobre 2026 avec ses tests : la calibration est extérieure à l'API.
+Un exemple équivalent, écrit côté utilisateur, figure dans la
+[politique de calibration](calibration.md#exemples-de-calibration-possible).
 
 La calibration est un préalable à la production laissé à l'utilisateur,
 qui choisit ses paramètres et sa méthode. Voir la
@@ -164,7 +165,7 @@ Les références et tests d'intégration sont dans
 [les tests de complétion technique](../../tests/test_technical_completion.py).
 Ils couvrent les dates de publication, troncatures et futurs modifiés,
 le filtre HMM contre une récurrence probabiliste indépendante, les excursions
-contre un exemple chiffré, les partitions triviales, la purge de calibration,
+contre un exemple chiffré, les partitions triviales
 et le parcours CLI → Parquet → Study → exports.
 
 Validation complète le 8 octobre 2026 : **608 tests réussis**, sans exclusion,

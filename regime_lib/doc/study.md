@@ -594,5 +594,6 @@ Voir les [variantes causales, cibles MFE/MAE et baselines](technical_completion.
 La calibration est un [préalable à la mise en production](calibration.md),
 sous la responsabilité de l'utilisateur, qui choisit ses paramètres et sa
 méthode. Elle ne fait pas partie des modules de fonctions à livrer dans l'API
-publique ni des opérations de `Study.run`. Les anciens prototypes relèvent
-de l'historique de recherche ; leurs exports Python restent à retirer du code.
+publique ni des opérations de `Study.run`. Les anciens prototypes ont été
+retirés du paquet ; la page [calibration](calibration.md) donne des exemples
+réalisables à partir des cibles et des sorties de détecteurs.
