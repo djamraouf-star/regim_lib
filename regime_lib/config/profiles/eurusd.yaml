@@ -2,12 +2,27 @@
 # Exemple pour certains indicateurs ; aucune calibration imposée par l'API.
 nom: eurusd
 type: forex_majeur
-description: "Exemple de paramètres spécifiques à EURUSD pour ADX et Shannon."
+description: "Paramètres EURUSD : ATR, ER et ADX M5 calibrés sur 2024 ; exemples ADX (autres TF) et Shannon."
 
 methodes:
+  atr_volatility:
+    timeframes:
+      # Calibré sur 2024 (ticks Dukascopy, Bid), critère de volatilité
+      # globale : voir analyses/eurusd_m5_atr_volatility/RESULTATS.md.
+      M5: {n_atr: 7, fenetre: 6000}
+  er_kaufman:
+    timeframes:
+      # Règle d'adoption appliquée sur 2024, mais calibration non
+      # informative (aucun candidat ne prédit l'efficience future) : voir
+      # analyses/eurusd_m5_er_kaufman/RESULTATS.md.
+      M5: {n_er: 20, fenetre: 6000}
   adx:
     seuil_range: 22.0
     seuil_tendance: 28.0
+    timeframes:
+      # Calibré sur 2024 (seuils = quantiles 40/60 de l'ADX(7)) ; effet
+      # faible : voir analyses/eurusd_m5_adx/RESULTATS.md.
+      M5: {n_adx: 7, seuil_range: 28.1, seuil_tendance: 34.6}
   shannon:
     # Surcharge générale prioritaire sur les fenêtres par timeframe des défauts.
     fenetre: 100
