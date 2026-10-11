@@ -1,6 +1,6 @@
 # Module d'étude
 
-**Dernière mise à jour** : 2026-10-06
+**Dernière mise à jour** : 2026-10-11
 **Module** : `regime_lib/study/`
 **Statut** : implémenté ; validation logicielle sur données synthétiques
 
@@ -587,4 +587,12 @@ n'est effectué par cette option.
 
 ## Compléments techniques du 8 octobre 2026
 
-Voir les [variantes causales, cibles MFE/MAE, calibration explicite et baselines](technical_completion.md).
+Voir les [variantes causales, cibles MFE/MAE et baselines](technical_completion.md).
+
+## Calibration et production
+
+La calibration est un [préalable à la mise en production](calibration.md),
+sous la responsabilité de l'utilisateur, qui choisit ses paramètres et sa
+méthode. Elle ne fait pas partie des modules de fonctions à livrer dans l'API
+publique ni des opérations de `Study.run`. Les anciens prototypes relèvent
+de l'historique de recherche ; leurs exports Python restent à retirer du code.

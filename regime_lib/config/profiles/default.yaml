@@ -1,4 +1,7 @@
-# Profil par défaut — valeurs de référence du projet.
+# Profil par défaut — paramètres arbitraires, propres à aucun actif.
+#
+# Ces valeurs ne constituent pas une calibration pour un actif particulier.
+# Chaque utilisateur choisit ses paramètres et sa méthode de calibration.
 #
 # Tous les autres profils héritent implicitement de celui-ci. Ils ne
 # redéfinissent que ce qu'ils changent.
@@ -13,7 +16,7 @@
 
 nom: default
 type: default
-description: "Valeurs de référence, calibrées sur EURUSD"
+description: "Paramètres arbitraires, propres à aucun actif ; aucune calibration spécifique."
 
 donnees:
   source: barres

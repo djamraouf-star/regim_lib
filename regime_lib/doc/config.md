@@ -1,6 +1,6 @@
 # Configuration par profils
 
-**Dernière mise à jour** : 2026-10-05
+**Dernière mise à jour** : 2026-10-11
 **Module** : `regime_lib/config/`
 **Source de vérité** : `regime_lib/config/profiles/default.yaml`
 
@@ -15,6 +15,17 @@ profil**, pas à modifier les méthodes.
 Chaque actif a ses propres paramètres (fenêtres, seuils, quantiles) qui
 dépendent de sa volatilité et de sa microstructure. Le profil les
 regroupe dans un fichier YAML lisible et versionnable.
+
+La calibration est un préalable à la mise en production, sous la responsabilité
+de l'utilisateur ; elle ne constitue pas un module de fonctions à livrer.
+L'API publique n'impose aucune calibration particulière par actif ni aucune
+méthode de calibration. Les paramètres de `default.yaml` sont **arbitraires,
+propres à aucun actif** ; ils ne constituent pas une calibration validée.
+Chaque utilisateur reste libre de choisir ses paramètres et sa méthode.
+Des calibrations spécifiques à EURUSD et XAUUSD peuvent être fournies à titre
+d'exemples pour certains indicateurs uniquement, sans devenir les valeurs
+par défaut de l'API. Le profil XAUUSD actuel ne contient aucune surcharge
+et ne constitue donc pas un exemple de calibration réalisée.
 
 ## 2. Structure d'un profil
 
@@ -194,9 +205,9 @@ M1/M5 de 200, l'indiquer explicitement sous `timeframes` dans ce profil.
 
 Cette section décrit les clés reconnues sous `methodes` dans
 [`profiles/default.yaml`](../config/profiles/default.yaml). Les valeurs
-ci-dessous sont les calibrations du profil par défaut, pas des valeurs
-universelles pour tous les actifs. Les valeurs codées en secours par les
-constructeurs peuvent différer lorsque le profil n'est pas fourni.
+ci-dessous sont des paramètres arbitraires, propres à aucun actif, et non
+des calibrations. Les constructeurs utilisent ces mêmes défauts YAML
+lorsqu'aucun profil personnalisé n'est fourni.
 
 Un paramètre indiqué « par timeframe » peut être placé soit directement
 sous la méthode (valeur commune à tous les timeframes), soit dans

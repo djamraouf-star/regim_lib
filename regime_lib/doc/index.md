@@ -38,6 +38,7 @@ shannon
 volume
 cli
 study
+calibration
 technical_completion
 api
 ```

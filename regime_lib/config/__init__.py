@@ -12,7 +12,7 @@ Structure d'un profil
 ---------------------
     nom: eurusd
     type: forex_majeur
-    description: "EURUSD, calibration 2025-2026"
+    description: "Exemple de paramètres spécifiques à EURUSD"
     
     donnees:
       source: barres

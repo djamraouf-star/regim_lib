@@ -94,7 +94,7 @@ Le premier ADX publié reste à `2n-1`. Les anciens résultats ADX doivent être
 régénérés : la précédente EMA était amorcée par la première valeur.
 Le test rationnel indépendant couvre DI, DX, ADX, chauffe et série plate.
 
-## Scores et calibration explicite
+## Scores et statut de la calibration
 
 Chaque méthode déclare `confidence_kind`, `confidence_description` et
 `confidence_calibrated=False`. Ces champs sont exportés ; les scores natifs
@@ -102,30 +102,14 @@ ne deviennent pas comparables en probabilité par simple normalisation dans
 [0,1]. Ils mesurent selon la méthode une marge, une constante par label,
 un posterior transformé ou la probabilité filtrée d'un état latent.
 
-`ConfidenceCalibrator` apprend une régression isotone sur un score et un
-**événement binaire défini par l'utilisateur**. Le sens croissant/décroissant
-est fixé avant évaluation. Utiliser un calibrateur par méthode/configuration,
-avec le même événement et horizon si l'objectif est une comparaison commune.
-Ne fournir que des scores valides (hors chauffe et inconnus) et des issues
-observées. Les deux issues doivent être représentées dans le train.
+Un prototype isotone a été développé lors des compléments techniques du
+8 octobre 2026. Il appartient à l'historique des travaux, et non au périmètre
+public à livrer. Ses tests synthétiques ne valident pas une calibration sur
+marché. Les exports historiques existent encore dans le code à cette date.
 
-```python
-from regime_lib.study import ConfidenceCalibrator
-
-cal = ConfidenceCalibrator("ret_fwd_5 > 0", increasing=True)
-cal.fit(scores_train, issues_train, target_end=fins_cibles_train)
-probabilites = cal.predict(scores_test)
-diagnostic = cal.evaluate(scores_test, issues_test)
-```
-
-Toutes les dates test doivent suivre strictement la dernière fin de cible du
-train : la purge est contrôlée. L'évaluation produit Brier, Brier de référence
-(taux de base du train), Brier skill, ECE à dix bins fixes et table de fiabilité.
-`cal.metadata` contient les bornes, effectifs et nœuds de la calibration pour
-export JSON. Ni les issues test ni leur taux de base ne changent le modèle.
-Cette API est explicite et indépendante de `Study.run` ; aucune cible de
-succès ou calibration n'est imposée automatiquement. Les tests synthétiques
-valident le mécanisme, pas la calibration empirique sur marché (C5).
+La calibration est un préalable à la production laissé à l'utilisateur,
+qui choisit ses paramètres et sa méthode. Voir la
+[politique de calibration](calibration.md) et la [feuille de route](TODO.md).
 
 ## Excursions et horizons
 

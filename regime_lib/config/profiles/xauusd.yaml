@@ -1,8 +1,8 @@
 # Profil XAUUSD — or spot.
 #
-# Ce profil hérite intégralement de `default.yaml`. Les paramètres
-# EURUSD seront utilisés pour le premier run, puis calibrés après
-# observation des distributions sur l'or.
+# Ce profil hérite intégralement des paramètres arbitraires de `default.yaml`,
+# propres à aucun actif. Il ne contient aucune calibration XAUUSD réalisée.
+# Chaque utilisateur choisit ses surcharges et sa méthode de calibration.
 #
 # Caractéristiques propres à XAUUSD (à valider empiriquement) :
 #   - volatilité ~2-3× supérieure à EURUSD (en valeur relative)

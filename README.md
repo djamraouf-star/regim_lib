@@ -16,6 +16,14 @@ Les cinq dimensions de comparaison sont l'amplitude, la régularité du trajet,
 la durée, la fréquence d'apparition et l'excursion opposée. L'API ne constitue
 ni une stratégie de trading ni un moteur de backtest.
 
+La calibration est un préalable à la mise en production, sous la responsabilité
+de l'utilisateur ; elle ne constitue pas un module de fonctions à livrer.
+L'API publique n'impose aucune calibration spécifique aux actifs. Les valeurs
+de [default.yaml](./regime_lib/config/profiles/default.yaml) sont des paramètres
+arbitraires, propres à aucun actif. Chaque utilisateur choisit ses paramètres
+et sa méthode de calibration. Des calibrations EURUSD et XAUUSD peuvent être
+fournies à titre d'exemples pour certains indicateurs uniquement.
+
 Le [contrat commun de projection et de mesure v1.0.0](./regime_lib/doc/protocole_projection_mesure.md)
 fixe la direction du développement, les conventions et les exemples numériques
 de référence. Il décrit les garanties à implémenter, pas une conformité déjà

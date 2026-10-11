@@ -1,7 +1,8 @@
 # Surcharges EURUSD uniquement ; les autres valeurs viennent de default.yaml.
+# Exemple pour certains indicateurs ; aucune calibration imposée par l'API.
 nom: eurusd
 type: forex_majeur
-description: "EURUSD, calibration 2025-2026 sur M1"
+description: "Exemple de paramètres spécifiques à EURUSD pour ADX et Shannon."
 
 methodes:
   adx:
