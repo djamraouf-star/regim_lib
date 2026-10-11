@@ -34,6 +34,19 @@ les spreads maximum sont maximisés, et les valeurs de clôture (`spread_close`,
 `ask_close`) sont prises sur la dernière barre de la fenêtre. La dernière
 barre résultante est marquée `is_partial`.
 
+Par défaut, une minute sans tick n'existe pas dans les barres M1 : toute
+barre supérieure qui la contient devient partielle. L'option
+`combler_sans_tick` (`agreger_tick`, `charger_et_agreger`, `load_parquet`)
+distingue explicitement les deux cas. Un trou entre deux barres cotées d'au
+plus cette durée est considéré comme marché ouvert sans cotation : il est
+comblé par des barres plates (OHLC et cotation de la barre précédente,
+volumes nuls, `tick_count = 0`). Un trou plus long (week-end, jour férié,
+coupure de flux) reste absent. Sur EURUSD 2024, tous les trous en semaine
+font au plus 30 minutes et la fermeture la plus courte 844 minutes : avec
+`combler_sans_tick="60min"`, la part de barres M15 partielles passe de
+4,7 % à 0,03 %. Le seuil retenu est consigné dans
+`attrs["combler_sans_tick"]`.
+
 ---
 
 ## 2. Schéma tabulaire uniforme

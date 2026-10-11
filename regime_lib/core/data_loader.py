@@ -22,6 +22,10 @@ Pour les ticks, l'agrégation en barres est **enrichie** :
     tick_count                → nombre de ticks dans la barre
     is_partial                → True pour la première / dernière barre
 
+Option `combler_sans_tick` : les trous courts entre barres cotées (marché
+ouvert sans cotation) deviennent des barres plates à `tick_count = 0` ;
+les trous plus longs (fermetures) restent absents.
+
 Les colonnes annexes (`bid_volume`, `ask_volume`, `spread_*`,
 `ask_close`, `tick_count`) sont propagées lors du resample vers un
 timeframe supérieur, avec des règles d'agrégation adaptées.
@@ -362,6 +366,8 @@ def agreger_tick(
     df_tick: pd.DataFrame,
     timeframe: str,
     prix: str = "bid",
+    *,
+    combler_sans_tick: str | pd.Timedelta | None = None,
 ) -> pd.DataFrame:
     """
     Agrège un DataFrame tick en barres OHLCV enrichies.
@@ -374,6 +380,12 @@ def agreger_tick(
         Clé de TIMEFRAME_RULES.
     prix : {"bid", "ask", "mid"}
         Côté de prix pour OHLCV. Défaut "bid".
+    combler_sans_tick : str | pd.Timedelta | None
+        Durée maximale d'un trou entre deux barres cotées considéré comme
+        marché ouvert sans cotation (ex. "60min"). Ces barres sont créées
+        plates : prix et cotation de la barre précédente, volumes nuls,
+        `tick_count = 0`. Les trous plus longs (fermetures) restent absents.
+        Défaut None : aucune barre sans tick n'est créée.
 
     Returns
     -------
@@ -382,6 +394,7 @@ def agreger_tick(
         [T - période, T).
     """
     _check_price_side(prix)
+    seuil_comblement = _seuil_comblement(combler_sans_tick)
     df_tick = _preparer_tick(df_tick)
     if timeframe not in TIMEFRAME_RULES:
         raise ValueError(
@@ -431,6 +444,8 @@ def agreger_tick(
     )
 
     agg = agg.dropna(subset=["open", "high", "low", "close"])
+    if seuil_comblement is not None:
+        agg = _combler_barres_sans_tick(agg, TIMEFRAME_SECONDS[timeframe], seuil_comblement)
 
     agg["is_partial"] = False
     if len(agg) > 0:
@@ -441,8 +456,54 @@ def agreger_tick(
     agg["tick_count"] = agg["tick_count"].astype("int64")
     agg.index.name = "timestamp"
     agg.attrs.update(timeframe=timeframe, timestamp_convention="close",
-                     calendar="continuous_utc_v1", price_side=prix)
+                     calendar="continuous_utc_v1", price_side=prix,
+                     combler_sans_tick=(None if seuil_comblement is None
+                                        else str(seuil_comblement)))
     return agg
+
+
+def _seuil_comblement(valeur: str | pd.Timedelta | None) -> pd.Timedelta | None:
+    """Valide la durée maximale des trous comblés par des barres sans tick."""
+    if valeur is None:
+        return None
+    try:
+        seuil = pd.Timedelta(valeur)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"combler_sans_tick invalide : {valeur!r}.") from exc
+    if pd.isna(seuil) or seuil <= pd.Timedelta(0):
+        raise ValueError("combler_sans_tick doit être une durée strictement positive.")
+    return seuil
+
+
+def _combler_barres_sans_tick(
+    agg: pd.DataFrame, step_seconds: int, seuil: pd.Timedelta,
+) -> pd.DataFrame:
+    """Insère des barres plates dans les trous d'au plus `seuil`.
+
+    Un trou est une suite de clôtures absentes entre deux barres cotées ;
+    il est comblé entièrement ou pas du tout. Seule l'information connue à
+    la clôture précédente est reprise : aucune valeur future n'est utilisée.
+    """
+    if len(agg) < 2:
+        return agg
+    step = pd.Timedelta(seconds=step_seconds)
+    grid = pd.date_range(agg.index[0], agg.index[-1], freq=step, name=agg.index.name)
+    full = agg.reindex(grid)
+    missing = full["close"].isna()
+    if not missing.any():
+        return agg
+    run = (~missing).cumsum()
+    longueur = missing.groupby(run).transform("sum")
+    fill = missing & (longueur * step <= seuil)
+    precedent = full[["close", "spread_close", "ask_close"]].ffill()
+    for col in ("open", "high", "low", "close"):
+        full.loc[fill, col] = precedent.loc[fill, "close"]
+    for col in ("volume", "bid_volume", "ask_volume", "tick_count"):
+        full.loc[fill, col] = 0
+    for col in ("spread_mean", "spread_max", "spread_close"):
+        full.loc[fill, col] = precedent.loc[fill, "spread_close"]
+    full.loc[fill, "ask_close"] = precedent.loc[fill, "ask_close"]
+    return full[~missing | fill]
 
 
 def charger_et_agreger(
@@ -452,13 +513,16 @@ def charger_et_agreger(
     saut_max: float | None = None,
     saut_max_rel: float | None = None,
     batch_size: int | None = None,
+    *,
+    combler_sans_tick: str | pd.Timedelta | None = None,
 ) -> pd.DataFrame:
     """Raccourci : charger un tick + agréger."""
     df_tick = charger_tick(
         url, saut_max=saut_max, saut_max_rel=saut_max_rel,
         batch_size=batch_size,
     )
-    return agreger_tick(df_tick, timeframe, prix=prix)
+    return agreger_tick(df_tick, timeframe, prix=prix,
+                        combler_sans_tick=combler_sans_tick)
 
 
 # ---------------------------------------------------------------------------
@@ -534,6 +598,7 @@ def load_parquet(
     *, timeframe: str | None = None,
     timestamp_convention: str | None = None,
     source_timezone: str = "UTC",
+    combler_sans_tick: str | pd.Timedelta | None = None,
 ) -> tuple[pd.DataFrame, str]:
     """
     Charge un parquet OHLCV ou tick. Détecte automatiquement le format.
@@ -551,6 +616,9 @@ def load_parquet(
         Taille des lots lus pour les ticks (local uniquement). Les lots
         restent accumulés avant concaténation et agrégation ; cela ne borne
         pas la mémoire totale. Voir `charger_tick`.
+    combler_sans_tick : str | pd.Timedelta | None
+        Ticks uniquement : trous d'au plus cette durée comblés par des
+        barres M1 sans tick. Voir `agreger_tick`.
 
     Returns
     -------
@@ -587,7 +655,8 @@ def load_parquet(
             df = charger_tick(
                 url, batch_size=batch_size
             )
-            df = agreger_tick(df, "M1", prix=prix)
+            df = agreger_tick(df, "M1", prix=prix,
+                               combler_sans_tick=combler_sans_tick)
         else:
             source_type = "barres"
             df = _normalize_columns(pd.read_parquet(url))
@@ -597,7 +666,8 @@ def load_parquet(
         if any(c in df.columns for c in _COLONNES_TICK[:2]):
             source_type = "ticks"
             source_rows = len(df)
-            df = agreger_tick(_preparer_tick(df), "M1", prix=prix)
+            df = agreger_tick(_preparer_tick(df), "M1", prix=prix,
+                              combler_sans_tick=combler_sans_tick)
         else:
             source_type = "barres"
 
@@ -645,6 +715,8 @@ def load_parquet(
         raise ValueError("Le chargement tick produit M1 ; timeframe source incompatible.")
     if source_type == "ticks" and (timestamp_convention is not None or source_timezone != "UTC"):
         raise ValueError("Les options de convention/fuseau source concernent les barres, pas les ticks.")
+    if source_type != "ticks" and combler_sans_tick is not None:
+        raise ValueError("combler_sans_tick concerne les ticks, pas les barres.")
     df.attrs["source_type"] = source_type
     df.attrs["source_rows"] = source_rows
     df.attrs["price_side"] = prix if source_type == "ticks" else df.attrs.get("price_side")

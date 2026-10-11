@@ -205,3 +205,85 @@ def test_resample_marks_incomplete_boundary_bars(ohlcv_h1):
 def test_resample_rejects_unknown_timeframe(ohlcv_h1):
     with pytest.raises(ValueError, match="Timeframe inconnu"):
         resample(ohlcv_h1, "Z9")
+
+
+def _ticks_with_gaps():
+    """Minutes cotées 10:00, 10:03 (trou de 2 min) puis 12:00 (trou de 116 min)."""
+    index = pd.to_datetime(
+        ["2026-01-05 10:00:10", "2026-01-05 10:00:50",
+         "2026-01-05 10:03:30", "2026-01-05 12:00:05"], utc=True,
+    )
+    return pd.DataFrame(
+        {"bidPrice": [1.10, 1.12, 1.15, 1.20], "askPrice": [1.11, 1.14, 1.16, 1.21],
+         "bidVolume": [1.0] * 4, "askVolume": [2.0] * 4},
+        index=index,
+    )
+
+
+def test_agreger_tick_without_fill_keeps_minutes_without_ticks_absent():
+    bars = agreger_tick(_ticks_with_gaps(), "M1")
+
+    assert len(bars) == 3
+    assert bars.attrs["combler_sans_tick"] is None
+
+
+def test_agreger_tick_fills_short_gaps_with_flat_bars_only():
+    bars = agreger_tick(_ticks_with_gaps(), "M1", combler_sans_tick="60min")
+
+    filled = bars.index[bars.tick_count.eq(0)]
+    assert filled.tolist() == list(pd.date_range("2026-01-05 10:02", periods=2,
+                                                 freq="min", tz="UTC"))
+    previous = bars.loc[pd.Timestamp("2026-01-05 10:01", tz="UTC")]
+    for ts in filled:
+        bar = bars.loc[ts]
+        assert bar[["open", "high", "low", "close"]].tolist() == [previous.close] * 4
+        assert bar[["volume", "bid_volume", "ask_volume"]].tolist() == [0.0] * 3
+        assert bar.spread_mean == bar.spread_max == bar.spread_close == pytest.approx(
+            previous.spread_close)
+        assert bar.ask_close == previous.ask_close
+        assert not bar.is_partial
+    # Le trou de 116 minutes dépasse le seuil : il reste absent.
+    assert not bars.index.to_series().between(
+        pd.Timestamp("2026-01-05 10:05", tz="UTC"),
+        pd.Timestamp("2026-01-05 11:59", tz="UTC")).any()
+    assert bars.tick_count.dtype == "int64"
+    assert bars.attrs["combler_sans_tick"] == "0 days 01:00:00"
+
+
+def test_filled_minutes_make_higher_timeframe_bar_complete():
+    ticks = _ticks_with_gaps().iloc[:3]
+
+    raw = resample(agreger_tick(ticks, "M1"), "M5")
+    filled = resample(agreger_tick(ticks, "M1", combler_sans_tick="5min"), "M5")
+
+    label = pd.Timestamp("2026-01-05 10:05", tz="UTC")
+    assert filled.loc[label, "source_count"] == 4
+    assert raw.loc[label, "source_count"] == 2
+
+
+@pytest.mark.parametrize("value", ["0min", "-1min", "abc"])
+def test_agreger_tick_rejects_invalid_fill_threshold(value):
+    with pytest.raises(ValueError, match="combler_sans_tick"):
+        agreger_tick(_ticks_with_gaps(), "M1", combler_sans_tick=value)
+
+
+def test_load_parquet_passes_fill_threshold_to_tick_aggregation(tmp_path):
+    path = tmp_path / "EURUSD_ticks.parquet"
+    ticks = _ticks_with_gaps()
+    ticks.index.name = "timestamp"
+    ticks.to_parquet(path)
+
+    bars, _ = load_parquet(str(path), combler_sans_tick="60min")
+
+    assert bars.tick_count.eq(0).sum() == 2
+    assert bars.attrs["combler_sans_tick"] == "0 days 01:00:00"
+
+
+def test_load_parquet_rejects_fill_threshold_for_bars(tmp_path):
+    path = tmp_path / "EURUSD_M1.parquet"
+    index = pd.date_range("2026-01-05 10:01", periods=2, freq="min", tz="UTC", name="timestamp")
+    pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+                 index=index).to_parquet(path)
+
+    with pytest.raises(ValueError, match="combler_sans_tick"):
+        load_parquet(str(path), combler_sans_tick="60min")
