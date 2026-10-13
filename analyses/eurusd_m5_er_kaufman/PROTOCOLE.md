@@ -82,3 +82,8 @@ regret.
 ## Journal des modifications
 
 - 2026-10-12 : version initiale.
+- 2026-10-13 : le fichier source est remplacé par
+  `actifs/EURUSD/EURUSD_Tick_20231120_20261010.parquet` (sha256
+  `51ef04fa…9674df7`), voir le journal de la
+  [calibration ATR M5](../eurusd_m5_atr_volatility/PROTOCOLE.md). Calibration
+  relancée : paramètres retenus inchangés (`n_er = 20`, `fenetre = 6000`).

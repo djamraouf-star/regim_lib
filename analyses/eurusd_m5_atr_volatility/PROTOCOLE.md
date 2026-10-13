@@ -102,3 +102,14 @@ sur le test et regret (meilleur S test − S test du retenu).
   `n_atr = 3` et `5` sont ajoutés ; critère, cible et règle d'adoption
   inchangés. Cette extension est décidée en connaissant la tendance
   monotone observée.
+- 2026-10-13, **changement du fichier source après perte du dossier local.**
+  Le fichier `EURUSD_ticks-20231120-20261002.parquet` (sha256 `ceecc25c…0936420`)
+  n'est plus disponible. Il est remplacé par
+  `actifs/EURUSD/EURUSD_Tick_20231120_20261010.parquet` (sha256
+  `51ef04fa…9674df7`), fin plus tardive. `calibrer.py` est mis à jour
+  (`SOURCE`, `SHA256`) ; grille, critère, cible et règle d'adoption sont
+  inchangés. Les calibrations ATR, ER et ADX ont été relancées : paramètres
+  retenus et scores identiques à ceux de `RESULTATS.md` (par exemple
+  S = 0,895 pour `n_atr = 7`, `fenetre = 6000`). Les fichiers de `output/`
+  sont régénérés avec le nouveau hash. Le fichier d'origine n'a pas été
+  comparé octet à octet.

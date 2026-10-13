@@ -21,8 +21,8 @@ from regime_lib.study import calculer_cible
 from regime_lib.utils.validation import validity_mask
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "actifs/EURUSD/EURUSD_ticks-20231120-20261002.parquet"
-SHA256 = "ceecc25cd6bf4ce21edd95d5c2c50f52454c20a361a437d94d8da72f51936420"
+SOURCE = ROOT / "actifs/EURUSD/EURUSD_Tick_20231120_20261010.parquet"
+SHA256 = "51ef04fa5ed3ae6e0e001f5eb745340d82376880b7c950008b9af41209674df7"
 OUT = Path(__file__).resolve().parent / "output"
 
 LECTURE = (pd.Timestamp("2023-11-20", tz="UTC"), pd.Timestamp("2025-01-10", tz="UTC"))
