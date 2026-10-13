@@ -82,3 +82,63 @@ celle du régime BAS (horloge seule : ≈ 2,1).
 - Aucun test hors échantillon (décision du 2026-10-12).
 - Heures de la référence horloge fixées d'après les données observées.
 - `q_low`, `q_high` et `n_direction` non calibrés ; un seul horizon (1 h).
+
+## Complément du 2026-10-13 : critère de fidélité à l'état courant
+
+Le critère ci-dessus est prédictif (volatilité de l'heure suivante). L'objectif
+visé est plutôt la fidélité à l'état courant du marché. Un étalon avec lookahead
+est donc utilisé : écart-type des rendements close-à-close sur une fenêtre
+centrée de 2k+1 barres, un estimateur différent de l'ATR (high/low). Scripts :
+[fidelite.py](fidelite.py), [balayage_k.py](balayage_k.py),
+[calibrer_quantiles.py](calibrer_quantiles.py). Sorties : `fidelite_continu.csv`,
+`fidelite_regimes.csv`, `balayage_k.csv`, `calibration_quantiles.csv`.
+Évaluation sur 2024 uniquement, sans test hors échantillon.
+
+**Décision : paramètres inchangés** (`n_atr = 7`, `fenetre = 6000`,
+`q_low = 0,33`, `q_high = 0,67`).
+
+### Résultats
+
+1. **`n_atr` optimal ≈ k+1** (k de 3 à 10), identique selon ρ de Spearman, κ de
+   Cohen et ρ désaisonnalisé. `n_atr = 7` est l'optimum pour k = 6 (fenêtre
+   d'environ 1 h) et reste à moins de 0,015 de κ du meilleur pour k de 5 à 10
+   (55 à 105 min). Le plateau s'élargit avec k.
+2. **Nombre de bascules.** `n_atr = 7` : 21 par jour, contre 18 pour l'étalon
+   (k = 6). `n_atr = 3` en donne 43.
+3. **Quantiles et fenêtre** (n_atr = 7, étalons k = 6 et 9, classement
+   identique). Défaut κ = 0,565 (k = 6) ; meilleur 0,606 avec
+   `q_low = 0,45`, `q_high = 0,55`, `fenetre = 8000`.
+   - `q_high` : effet inférieur à 0,01.
+   - `q_low` et `fenetre` : κ croît de façon monotone jusqu'au bord de la
+     grille (0,45 et 8000).
+
+### Limites
+
+- Le meilleur combo (0,45 / 0,55) laisse 10 % de barres en CHOP : le κ est
+  mécaniquement plus haut quand la classe intermédiaire disparaît. Le κ n'est
+  pas comparable entre proportions de classes différentes, donc ce résultat
+  n'est pas retenu.
+- L'échelle d'état courant (k) n'est pas tranchée. Indice non vérifié : un
+  mouvement d'environ 1 h serait le plus prometteur sur EURUSD.
+- Le retard de l'indicateur n'est pas mesuré (le décalage testé va dans le
+  mauvais sens ; optimum à 0 partout).
+- Pas de validation glissante ni de test hors échantillon sur ce critère.
+  Le κ minimal par bloc de deux mois (0,45–0,48) est supérieur à l'écart avec
+  le défaut.
+
+### Pistes d'évolution
+
+- **`fenetre`** : grille plus large (4000 à 20000). Demande plus de warmup avant
+  2024 (la source commence le 2023-11-20).
+- **Métrique indépendante des proportions** (AUC de l'ATR contre l'étalon) pour
+  arbitrer `q_low` et `q_high`, ou les traiter comme un choix de conception
+  (largeur de la zone CHOP).
+- **Retard réel** : comparer à un étalon décalé, ou mesurer le délai de
+  détection des changements de régime de l'étalon.
+- **Échelle k** : la fixer par une autre voie que l'ATR (autres indicateurs,
+  étalon HMM non causal ou segmentation).
+- **Validation** : test sur 2025 et validation glissante avec ce critère.
+- **Autres timeframes** : tester la règle `n_atr ≈ k+1`.
+- **Saisonnalité intraday** : décider si l'étalon doit être désaisonnalisé.
+  ρ passe de 0,89 à 0,78 (k = 6) une fois la séance retirée.
+- **`n_direction`** : non calibré.
