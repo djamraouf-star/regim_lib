@@ -29,8 +29,11 @@ def test_profiles_preserve_layers_and_inherit_omitted_methods():
     assert "pca_axis" not in custom.methodes
     assert custom.for_method("pca_axis").defaults["fenetre"] == 100
     assert ADXDetector(profile=custom.for_method("adx")).seuil_range == 22
-    assert ShannonEntropyDetector(timeframe="M1", profile=custom.for_method("shannon")).fenetre == 100
-    assert ShannonEntropyDetector(timeframe="M1").fenetre == 200
+    # Surcharge générale du profil sur un timeframe non calibré, surcharge par
+    # timeframe sur M1 (calibré).
+    assert ShannonEntropyDetector(timeframe="H4", profile=custom.for_method("shannon")).fenetre == 100
+    assert ShannonEntropyDetector(timeframe="M1", profile=custom.for_method("shannon")).fenetre == 400
+    assert ShannonEntropyDetector(timeframe="H4").fenetre == 50
 
 
 @pytest.mark.parametrize("name", sorted(METHOD_REGISTRY))
@@ -187,3 +190,13 @@ def test_adx_parameters_are_timeframe_specific(tmp_path):
 
     assert (m5.n_adx, m5.seuil_range, m5.seuil_tendance) == (7, 28.1, 34.6)
     assert (h1.n_adx, h1.seuil_range, h1.seuil_tendance) == (14, 20.0, 25.0)
+
+
+def test_shannon_thresholds_are_timeframe_specific(tmp_path):
+    profil = load_profile(write_profile(tmp_path, {"shannon": {"timeframes": {
+        "M5": {"fenetre": 400, "seuil_ordonne": 0.56, "seuil_desordre": 0.64}}}}))
+    m5 = ShannonEntropyDetector(timeframe="M5", profile=profil.for_method("shannon"))
+    h1 = ShannonEntropyDetector(timeframe="H1", profile=profil.for_method("shannon"))
+
+    assert (m5.fenetre, m5.seuil_ordonne, m5.seuil_desordre) == (400, 0.56, 0.64)
+    assert (h1.seuil_ordonne, h1.seuil_desordre) == (0.65, 0.78)

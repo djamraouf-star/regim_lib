@@ -88,8 +88,12 @@ class ShannonEntropyDetector(RegimeDetector):
         parameters={
             "fenetre": Parameter(int, minimum=10, per_timeframe=True),
             "n_bins": Parameter(int, minimum=2, per_timeframe=True),
-            "seuil_ordonne": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
-            "seuil_desordre": Parameter(float, minimum=0, maximum=1, exclusive_min=True, exclusive_max=True),
+            # Réglables par timeframe : l'entropie dépend de fenetre et n_bins,
+            # donc les seuils absolus aussi.
+            "seuil_ordonne": Parameter(float, minimum=0, maximum=1, exclusive_min=True,
+                                       exclusive_max=True, per_timeframe=True),
+            "seuil_desordre": Parameter(float, minimum=0, maximum=1, exclusive_min=True,
+                                        exclusive_max=True, per_timeframe=True),
         },
         constraints=(Ordered("seuil_ordonne", "seuil_desordre"),),
     )

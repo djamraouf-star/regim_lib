@@ -325,6 +325,10 @@ requise.
 | `seuil_ordonne` | `0.65` | En dessous de ce seuil d'entropie normalisée, le régime est `ORDONNE`. |
 | `seuil_desordre` | `0.78` | Au-dessus de ce seuil, le régime est `DESORDRE` ; entre les deux, `NEUTRE`. |
 
+Les quatre paramètres sont réglables par timeframe : l'entropie dépend de
+`fenetre` et de `n_bins`, donc des seuils absolus n'ont de sens que pour un
+couple et un timeframe donnés.
+
 ### `pca_axis`
 
 | Paramètre | Défaut | Portée et rôle |

@@ -2,7 +2,7 @@
 # Exemple pour certains indicateurs ; aucune calibration imposée par l'API.
 nom: eurusd
 type: forex_majeur
-description: "Paramètres EURUSD : ATR, ER et ADX M5 calibrés sur 2024 ; exemples ADX (autres TF) et Shannon."
+description: "Paramètres EURUSD : ATR, ER, ADX et Shannon (M1, M5, M15, H1) calibrés sur 2024 ; exemples ADX (autres TF) et Shannon."
 
 methodes:
   atr_volatility:
@@ -28,6 +28,15 @@ methodes:
     fenetre: 100
     seuil_ordonne: 0.3
     seuil_desordre: 0.7
+    timeframes:
+      # Seuils = quantiles 40/60 de H sur 2024 ; calibration non
+      # informative : voir analyses/eurusd_m5_shannon/RESULTATS.md.
+      M5: {fenetre: 400, n_bins: 10, seuil_ordonne: 0.56, seuil_desordre: 0.64}
+      # M1, M15, H1 : même démarche, horizon de 12 barres, également non
+      # informatifs : voir analyses/eurusd_{m1,m15,h1}_shannon/RESULTATS.md.
+      M1: {fenetre: 400, n_bins: 5, seuil_ordonne: 0.56, seuil_desordre: 0.62}
+      M15: {fenetre: 100, n_bins: 5, seuil_ordonne: 0.65, seuil_desordre: 0.72}
+      H1: {fenetre: 100, n_bins: 5, seuil_ordonne: 0.60, seuil_desordre: 0.67}
 
 segmentation:
   pen: 3.0
